@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.5.28", features = ["cargo"] }
+rayon = "1.10.0"
+thiserror = "2.0.11"
+walkdir = "2.5.0"
