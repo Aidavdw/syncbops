@@ -5,29 +5,9 @@ use std::{
 
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> bool {
-    let ffprobe = Command::new("ffprobe")
-        .arg(path)
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let grep_cover = Command::new("grep")
-        .arg("Cover")
-        .stdin(Stdio::from(ffprobe.stdout.unwrap()))
-        .stderr(Stdio::null())
-        .spawn()
-        .unwrap();
-    match grep_cover.wait_with_output() {
-        // Grep returns a status code of OK if there is a match.
-        Ok(x) => {
-            return x.stdout.is_empty();
-        }
-        Err(e) => eprintln!(
-            "Could not check for embedded artwork in file '{}': {}",
-            path.display(),
-            e
-        ),
-    }
-    false
+    let ffprobe = Command::new("ffprobe").arg(path).output().unwrap();
+    let txt = String::from_utf8(ffprobe.stderr).unwrap();
+    txt.contains("Cover")
 }
 
 #[cfg(test)]
@@ -41,5 +21,11 @@ mod tests {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         assert!(does_file_have_embedded_artwork(&file_with_embedded_artwork));
+
+        let file_without_embedded_artwork: PathBuf =
+            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
+        assert!(!does_file_have_embedded_artwork(
+            &file_without_embedded_artwork
+        ))
     }
 }
