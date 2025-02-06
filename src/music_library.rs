@@ -16,7 +16,10 @@ pub enum MusicFileType {
     Flac,
 }
 
-pub enum ImageType {}
+pub enum ImageType {
+    Png,
+    Jpg,
+}
 
 pub enum FileType {
     Music(MusicFileType),
@@ -26,13 +29,14 @@ pub enum FileType {
 
 fn identify_file_type(path: &Path) -> Option<FileType> {
     let ext = path.extension()?.to_ascii_lowercase();
-    if ext == "mp3" {
-        Some(FileType::Music(MusicFileType::Mp3))
-    } else if ext == "flac" {
-        Some(FileType::Music(MusicFileType::Flac))
-    } else {
-        None
-    }
+    Some(match ext.as_os_str().to_str()? {
+        "mp3" => FileType::Music(MusicFileType::Mp3),
+        "flac" => FileType::Music(MusicFileType::Flac),
+        "png" => FileType::Art(ImageType::Png),
+        "jpg" => FileType::Art(ImageType::Jpg),
+        "jpeg" => FileType::Art(ImageType::Jpg),
+        _ => return None,
+    })
 }
 
 pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibraryError> {

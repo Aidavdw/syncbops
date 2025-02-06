@@ -1,9 +1,12 @@
+mod ffmpeg_interface;
 mod music_library;
 
 use std::path::{Path, PathBuf};
 
 use clap::{arg, value_parser};
+use ffmpeg_interface::does_file_have_embedded_artwork;
 use music_library::find_albums_in_directory;
+use rayon::iter;
 use walkdir::{DirEntry, WalkDir};
 fn main() {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
@@ -41,6 +44,22 @@ fn main() {
             .sum::<usize>(),
         albums.len()
     );
+    // Report if there are songs without album art.
+
+    //let songs_without_album_art: Vec<PathBuf> = albums
+    //    .iter()
+    //    .map(|album| match album.album_art {
+    //        Some(_) => None,
+    //        None => album
+    //            .music_files
+    //            .iter()
+    //            .map(|music_file| does_file_have_embedded_artwork(music_file))
+    //            .sum(),
+    //    })
+    //    .sum();
+
+    // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
+    // reading their tags, and link it if the album does not yet have art set.
 
     // Iterate through the folders. If there is a music file here, then this should be an
     // album.
