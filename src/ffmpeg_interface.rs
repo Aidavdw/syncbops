@@ -5,6 +5,8 @@ use std::{
     process::{Command, Stdio},
 };
 
+use itertools::Itertools;
+
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> bool {
     let ffprobe = Command::new("ffprobe").arg(path).output().unwrap();
@@ -67,9 +69,14 @@ pub fn transcode_song(
     let cmd = binding.arg(target);
     let output = cmd.output()?;
     if !output.status.success() {
+        let cmd_txt = binding
+            .get_args()
+            .map(|osstr| osstr.to_string_lossy())
+            .join(" ");
         let msg = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(FfmpegError::Transcode {
             file: source.into(),
+            cmd: cmd_txt,
             msg,
         });
     }
@@ -84,8 +91,14 @@ pub enum FfmpegError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
 
-    #[error("Could not transcode file {file}: {msg} ")]
-    Transcode { file: PathBuf, msg: String },
+    #[error(
+        "Could not transcode file {file}:\nTried calling: ffmpeg {cmd}\nOutput of ffmpeg:\n{msg} "
+    )]
+    Transcode {
+        file: PathBuf,
+        cmd: String,
+        msg: String,
+    },
 
     #[error("IO error")]
     Io(#[from] std::io::Error),

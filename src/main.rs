@@ -1,8 +1,10 @@
 mod ffmpeg_interface;
 mod music_library;
+mod song;
 
 use clap::{arg, value_parser};
-use music_library::{find_albums_in_directory, songs_without_album_art, Album};
+use music_library::{find_albums_in_directory, songs_without_album_art, sync_song, Album};
+use song::Song;
 use std::path::{Path, PathBuf};
 fn main() {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
@@ -13,7 +15,7 @@ fn main() {
         .arg_required_else_help(true)
         .args([
             arg!(<INPUT> "Input directory for walking").required(true).value_parser(value_parser!(PathBuf)),
-            arg!(<OUTPUT> "Output directory").required(true),
+            arg!(<OUTPUT> "Output directory").required(true).value_parser(value_parser!(PathBuf)),
             // LAME uses V1 etc, ffmpeg actually uses -q:a 1. https://trac.ffmpeg.org/wiki/Encode/MP3 
             arg!(-c --compressionlevel <MP3_COMPRESSION_LEVEL> "Target average bitrate preset for MP3 VBR compression. Only supply the number, e.g '0'. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. Defaults to V3 = 175kbit/s"),
             arg!(-f --force "Force overwrite existing files"),
@@ -26,13 +28,13 @@ fn main() {
         ]);
     let matches = cmd.get_matches();
 
-    let library_dir: PathBuf = matches
+    let source_library: PathBuf = matches
         .get_one::<PathBuf>("INPUT")
         .expect("no library dir given")
         .to_path_buf();
 
-    println!("Discovering files in {}", library_dir.display());
-    let albums = find_albums_in_directory(&library_dir).unwrap();
+    println!("Discovering files in {}", source_library.display());
+    let albums = find_albums_in_directory(&source_library).unwrap();
     println!(
         "Discovered {} songs in {} folders.",
         albums
@@ -50,6 +52,42 @@ fn main() {
         }
     }
 
+    // Convert Albums to Songs
+    let mut songs = Vec::new();
+    for album in albums {
+        songs.extend(album.music_files.iter().map(|music_file| Song {
+            path: music_file.to_path_buf(),
+            external_album_art: album.album_art.clone(),
+        }));
+    }
+    let songs = songs; // unmut
+
+    let target_library: PathBuf = matches
+        .get_one::<PathBuf>("OUTPUT")
+        .expect("no output library dir given")
+        .to_path_buf();
+
+    let v_level = 3;
+    let include_album_art = false;
+
+    let res = songs
+        .iter()
+        .map(|song| {
+            sync_song(
+                song,
+                &source_library,
+                &target_library,
+                v_level,
+                include_album_art,
+            )
+        })
+        .collect::<Vec<_>>();
+    for file_res in res {
+        match file_res {
+            Ok(x) => println!("song OK: {:?}", x),
+            Err(e) => eprintln!("Error processing a song: {}", e),
+        }
+    }
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
 }

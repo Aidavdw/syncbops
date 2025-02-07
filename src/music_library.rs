@@ -4,8 +4,22 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::ffmpeg_interface::does_file_have_embedded_artwork;
+use crate::ffmpeg_interface::transcode_song;
+use crate::ffmpeg_interface::FfmpegError;
+use crate::song::Song;
 
-// Represents an album: A directory with songs in it.
+#[derive(Debug)]
+pub enum UpdateType {
+    /// The file did not need to be changed, as it is up-to-date
+    Unchanged,
+    /// The file is completely new, so everything had to be done from scratch
+    New,
+    /// Updated because it was modified more recently than the shadow copy
+    SourceIsNewer,
+}
+
+// TODO: Phase out albums, use Song instead.
+/// Represents an album: A directory with songs in it.
 #[derive(Debug)]
 pub struct Album {
     /// All the files in it that are music
@@ -177,6 +191,38 @@ pub fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Synchronises the file. Returns true if the file is updated, false it was not.
+pub fn sync_song(
+    song: &Song,
+    source_library: &Path,
+    target_library: &Path,
+    v_level: u32,
+    include_album_art: bool,
+) -> Result<UpdateType, MusicLibraryError> {
+    // Early exit if it doesn't need to be updated.
+    let shadow = song.get_shadow_filename(source_library, target_library);
+    if !has_music_file_changed(&song.path, &shadow) {
+        return Ok(UpdateType::Unchanged);
+    }
+
+    // Can't change files in place with ffmpeg, so if we need to update then we need to
+    // overwrite the file anyway.
+    let how_updated = if shadow.exists() {
+        UpdateType::SourceIsNewer
+    } else {
+        UpdateType::New
+    };
+    // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
+    transcode_song(
+        &song.path,
+        &shadow,
+        v_level,
+        include_album_art,
+        song.external_album_art.as_deref(),
+    )?;
+
+    Ok(how_updated)
+}
 #[derive(thiserror::Error, Debug)]
 pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
@@ -187,6 +233,9 @@ pub enum MusicLibraryError {
 
     #[error("No albums found in directory {dir}")]
     NoAlbumsFound { dir: PathBuf },
+
+    #[error("Error in calling ffmpeg")]
+    Ffmpeg(#[from] FfmpegError),
 }
 
 #[cfg(test)]
@@ -195,6 +244,8 @@ mod tests {
     use std::{fs::File, path::PathBuf, thread::sleep};
 
     use itertools::Itertools;
+
+    use crate::song::Song;
 
     use super::{songs_without_album_art, Album};
 
@@ -208,6 +259,22 @@ mod tests {
         File::create(newer_file.clone()).unwrap();
         assert!(!f(&older_file, &newer_file));
         assert!(f(&newer_file, &older_file));
+    }
+
+    #[test]
+    fn sync_song() {
+        use super::sync_song as f;
+
+        // New song, that doesn't have a shadow copy yet
+        let source_library: PathBuf = "/home/aida/portable_music/".into();
+        let target_library: PathBuf = "/tmp/target_library".into();
+        let new_song = Song {
+            path: "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into(),
+            external_album_art: None,
+        };
+        let _ =
+            std::fs::remove_file(new_song.get_shadow_filename(&source_library, &target_library));
+        f(&new_song, &source_library, &target_library, 3, false).unwrap();
     }
 
     #[test]
