@@ -3,7 +3,7 @@ mod music_library;
 
 use clap::{arg, value_parser};
 use ffmpeg_interface::does_file_have_embedded_artwork;
-use music_library::{find_albums_in_directory, Album};
+use music_library::{find_albums_in_directory, songs_without_album_art, Album};
 use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 fn main() {
@@ -43,16 +43,14 @@ fn main() {
         albums.len()
     );
     // Report if there are songs without album art.
-    //
-    //
+    let songs_without_album_art = songs_without_album_art(&albums);
+    if !songs_without_album_art.is_empty() {
+        println!("Warning! There are songs without any album art (embedded or found in Cover.jpg, folder.png, etc:");
+        for x in songs_without_album_art {
+            println!("\t- {}", x.display())
+        }
+    }
 
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
-
-    // Iterate through the folders. If there is a music file here, then this should be an
-    // album.
-    // if there are no music files here, then go some level deeper, because there might be
-    // music in a sub-folder.
-    // If there are no music files, and there are also no sub-folders, then ignore this foledr
-    // and continue with the next one.
 }

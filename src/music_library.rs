@@ -43,6 +43,12 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
 }
 
 pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibraryError> {
+    // Iterate through the folders. If there is a music file here, then this should be an
+    // album.
+    // if there are no music files here, then go some level deeper, because there might be
+    // music in a sub-folder.
+    // If there are no music files, and there are also no sub-folders, then ignore this foledr
+    // and continue with the next one.
     if !path.is_dir() {
         return Err(MusicLibraryError::NotADirectory {
             path: path.to_path_buf(),
@@ -121,7 +127,7 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
     Ok(albums)
 }
 
-fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
+pub fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
     // If there is an associated album art file, there definitely is album art. If there is
     // not, check if there is embedde art for each file (costlier)
     albums
