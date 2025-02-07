@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use std::ffi::OsStr;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -40,6 +41,22 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
         "jpeg" => FileType::Art(ImageType::Jpg),
         _ => return None,
     })
+}
+
+/// Checks if the file meets the criteria to be considered dedicated album art: is it named
+/// cover.jpg or something?
+fn is_image_file_album_art(path: &Path) -> bool {
+    // if it's something like "cover" or "folder"
+    const ALLOWED_STEMS: [&str; 5] = ["cover", "folder", "album", "cover_image", "cover_art"];
+    let stem_is_allowed: bool = ALLOWED_STEMS.iter().any(|x| {
+        path.file_stem()
+            .is_some_and(|s| s.to_ascii_lowercase() == *x)
+    });
+
+    let has_right_extension =
+        identify_file_type(path).is_some_and(|file_type| matches!(file_type, FileType::Art(_)));
+
+    stem_is_allowed && has_right_extension
 }
 
 pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibraryError> {
@@ -103,7 +120,7 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
                     music_files.push(sub_path);
                 }
                 FileType::Art(_) => {
-                    if album_art.is_none() {
+                    if album_art.is_none() && is_image_file_album_art(&sub_path) {
                         album_art = Some(sub_path)
                     }
                 }
