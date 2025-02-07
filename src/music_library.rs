@@ -143,6 +143,29 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
     Ok(albums)
 }
 
+/// Checks if the source music file has been changed since it has been transcoded. First checks
+/// if the source file is newer (more recently changed), and if not, checks if the metadata is
+/// identical.
+pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
+    if !target.exists() {
+        // If the target doesn't exist, it must be newer.
+        return true;
+    }
+    // Get the metadata for both files
+    let source_last_modified = fs::metadata(source)
+        .expect("Unable to read source file metadata.")
+        .modified()
+        .expect("could not get modification time for source");
+    let target_last_modified = fs::metadata(target)
+        .expect("Unable to read target file metadata.")
+        .modified()
+        .expect("could not get modification time for source");
+    if source_last_modified > target_last_modified {
+        return true;
+    }
+    false
+}
+
 pub fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
     // If there is an associated album art file, there definitely is album art. If there is
     // not, check if there is embedde art for each file (costlier)
@@ -168,11 +191,24 @@ pub enum MusicLibraryError {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use core::time;
+    use std::{fs::File, path::PathBuf, thread::sleep};
 
     use itertools::Itertools;
 
     use super::{songs_without_album_art, Album};
+
+    #[test]
+    fn has_music_file_changed_based_on_last_modified_time() {
+        use super::has_music_file_changed as f;
+        let older_file: PathBuf = "/tmp/older_file.mp3".into();
+        let newer_file: PathBuf = "/tmp/newer_file.mp3".into();
+        File::create(older_file.clone()).unwrap();
+        sleep(time::Duration::new(2, 0));
+        File::create(newer_file.clone()).unwrap();
+        assert!(!f(&older_file, &newer_file));
+        assert!(f(&newer_file, &older_file));
+    }
 
     #[test]
     fn songs_without_album_art_test() {
