@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{arg, value_parser};
 use ffmpeg_interface::does_file_have_embedded_artwork;
-use music_library::find_albums_in_directory;
+use music_library::{find_albums_in_directory, Album};
 use rayon::iter;
 use walkdir::{DirEntry, WalkDir};
 fn main() {
@@ -45,18 +45,8 @@ fn main() {
         albums.len()
     );
     // Report if there are songs without album art.
-
-    //let songs_without_album_art: Vec<PathBuf> = albums
-    //    .iter()
-    //    .map(|album| match album.album_art {
-    //        Some(_) => None,
-    //        None => album
-    //            .music_files
-    //            .iter()
-    //            .map(|music_file| does_file_have_embedded_artwork(music_file))
-    //            .sum(),
-    //    })
-    //    .sum();
+    //
+    //
 
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
@@ -67,4 +57,21 @@ fn main() {
     // music in a sub-folder.
     // If there are no music files, and there are also no sub-folders, then ignore this foledr
     // and continue with the next one.
+}
+
+fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
+    let mut res: Vec<PathBuf> = Vec::new();
+    for album in albums {
+        // If there is an associated album art file, there definitely is album art. If there is
+        // not, check if there is embedde art for each file (costlier)
+        if album.album_art.is_some() {
+            continue;
+        }
+        for music_file in &album.music_files {
+            if !does_file_have_embedded_artwork(music_file) {
+                res.push(music_file.to_path_buf())
+            }
+        }
+    }
+    res
 }
