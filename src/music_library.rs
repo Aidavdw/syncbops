@@ -1,6 +1,9 @@
+use rayon::prelude::*;
 use std::fs::{self, DirEntry};
 use std::io;
 use std::path::{Path, PathBuf};
+
+use crate::ffmpeg_interface::does_file_have_embedded_artwork;
 
 // Represents an album: A directory with songs in it.
 #[derive(Debug)]
@@ -118,6 +121,17 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
     Ok(albums)
 }
 
+fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
+    // If there is an associated album art file, there definitely is album art. If there is
+    // not, check if there is embedde art for each file (costlier)
+    albums
+        .par_iter()
+        .filter(|album| album.album_art.is_none())
+        .flat_map(|album| album.music_files.clone())
+        .filter(|music_file| !does_file_have_embedded_artwork(music_file))
+        .collect()
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
@@ -128,4 +142,101 @@ pub enum MusicLibraryError {
 
     #[error("No albums found in directory {dir}")]
     NoAlbumsFound { dir: PathBuf },
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use itertools::Itertools;
+
+    use super::{songs_without_album_art, Album};
+
+    #[test]
+    fn songs_without_album_art_test() {
+        let file_with_embedded_artwork: PathBuf =
+            "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
+
+        let file_without_embedded_artwork: PathBuf =
+            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
+
+        // One album only, only embedded
+        assert_eq!(
+            songs_without_album_art(&[Album {
+                music_files: vec![
+                    file_with_embedded_artwork.clone(),
+                    file_without_embedded_artwork.clone()
+                ],
+                album_art: None
+            }])
+            .iter()
+            .exactly_one()
+            .unwrap(),
+            &file_without_embedded_artwork
+        );
+
+        // Two albums, only embbeded
+        assert_eq!(
+            songs_without_album_art(&[
+                Album {
+                    music_files: vec![
+                        file_with_embedded_artwork.clone(),
+                        file_without_embedded_artwork.clone()
+                    ],
+                    album_art: None
+                },
+                Album {
+                    music_files: vec![
+                        file_with_embedded_artwork.clone(),
+                        file_without_embedded_artwork.clone()
+                    ],
+                    album_art: None
+                }
+            ])
+            .len(),
+            2
+        );
+
+        // Two albums, one embedded, the other dedicated.
+        assert_eq!(
+            songs_without_album_art(&[
+                Album {
+                    music_files: vec![
+                        file_with_embedded_artwork.clone(),
+                        file_without_embedded_artwork.clone()
+                    ],
+                    album_art: None
+                },
+                Album {
+                    music_files: vec![
+                        file_with_embedded_artwork.clone(),
+                        file_without_embedded_artwork.clone()
+                    ],
+                    album_art: Some(PathBuf::default())
+                }
+            ])
+            .iter()
+            .exactly_one()
+            .unwrap(),
+            &file_without_embedded_artwork
+        );
+
+        assert!(songs_without_album_art(&[Album {
+            music_files: vec![
+                file_with_embedded_artwork.clone(),
+                file_without_embedded_artwork.clone()
+            ],
+            album_art: Some(PathBuf::default())
+        }])
+        .is_empty());
+
+        assert!(songs_without_album_art(&[Album {
+            music_files: vec![
+                file_without_embedded_artwork.clone(),
+                file_without_embedded_artwork.clone()
+            ],
+            album_art: Some(PathBuf::default())
+        }])
+        .is_empty());
+    }
 }

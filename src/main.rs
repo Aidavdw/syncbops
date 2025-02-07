@@ -1,12 +1,10 @@
 mod ffmpeg_interface;
 mod music_library;
 
-use std::path::{Path, PathBuf};
-
 use clap::{arg, value_parser};
 use ffmpeg_interface::does_file_have_embedded_artwork;
 use music_library::{find_albums_in_directory, Album};
-use rayon::iter;
+use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 fn main() {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
@@ -57,21 +55,4 @@ fn main() {
     // music in a sub-folder.
     // If there are no music files, and there are also no sub-folders, then ignore this foledr
     // and continue with the next one.
-}
-
-fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
-    let mut res: Vec<PathBuf> = Vec::new();
-    for album in albums {
-        // If there is an associated album art file, there definitely is album art. If there is
-        // not, check if there is embedde art for each file (costlier)
-        if album.album_art.is_some() {
-            continue;
-        }
-        for music_file in &album.music_files {
-            if !does_file_have_embedded_artwork(music_file) {
-                res.push(music_file.to_path_buf())
-            }
-        }
-    }
-    res
 }
