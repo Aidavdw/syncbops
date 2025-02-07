@@ -2,10 +2,8 @@ mod ffmpeg_interface;
 mod music_library;
 
 use clap::{arg, value_parser};
-use ffmpeg_interface::does_file_have_embedded_artwork;
 use music_library::{find_albums_in_directory, songs_without_album_art, Album};
 use std::path::{Path, PathBuf};
-use walkdir::{DirEntry, WalkDir};
 fn main() {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
     let cmd = clap::Command::new("musicsync")
@@ -24,6 +22,7 @@ fn main() {
             arg!(--"embed-art" <EMBED_ART> "How to handle embedded art. 'none' removes all embedded art. 'retain' keeps embedded art, but does not embed new art. 'retain_if_no_album_art' keeps only embedded art for albums where no cover art file is found. 'embed' forces embedding for every track (this might take up extra space). Defaults to 'retain_if_no_album_art.'"),
             arg!(--"embed-art-resolution" "Maximum resolution for embedded art. Files lower in resolution will not be touched. Default (not set) will embed everything at their actual resolution."),
             arg!(--"cover-image-file-names" <COVER> "Cover image suffix (case-insensitive). Default to Cover.jpg,Cover.png,AlbumArtSmall.jpg,AlbumArtwork.png")
+            // TODO: An option to not replace files, but just edit their tags.
         ]);
     let matches = cmd.get_matches();
 

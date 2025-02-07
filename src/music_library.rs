@@ -1,6 +1,5 @@
 use rayon::prelude::*;
-use std::ffi::OsStr;
-use std::fs::{self, DirEntry};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
