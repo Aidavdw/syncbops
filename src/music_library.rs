@@ -212,6 +212,14 @@ pub fn sync_song(
     } else {
         UpdateType::New
     };
+
+    // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
+    let _ = fs::create_dir_all(
+        shadow
+            .parent()
+            .expect("Cannot create picture in target library"),
+    );
+
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
     transcode_song(
         &song.path,
