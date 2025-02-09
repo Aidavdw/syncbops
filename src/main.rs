@@ -3,10 +3,14 @@ mod music_library;
 mod song;
 
 use clap::{arg, value_parser};
-use music_library::{find_albums_in_directory, songs_without_album_art, sync_song, Album};
+use music_library::{
+    find_albums_in_directory, songs_without_album_art, sync_song, Album, MusicLibraryError,
+    UpdateType,
+};
 use song::Song;
+use std::fs;
 use std::path::{Path, PathBuf};
-fn main() {
+fn main() -> miette::Result<()> {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
     let cmd = clap::Command::new("musicsync")
         .bin_name("music_portable_sync")
@@ -24,7 +28,6 @@ fn main() {
             arg!(--"embed-art" <EMBED_ART> "How to handle embedded art. 'none' removes all embedded art. 'retain' keeps embedded art, but does not embed new art. 'retain_if_no_album_art' keeps only embedded art for albums where no cover art file is found. 'embed' forces embedding for every track (this might take up extra space). Defaults to 'retain_if_no_album_art.'"),
             arg!(--"embed-art-resolution" "Maximum resolution for embedded art. Files lower in resolution will not be touched. Default (not set) will embed everything at their actual resolution."),
             arg!(--"cover-image-file-names" <COVER> "Cover image suffix (case-insensitive). Default to Cover.jpg,Cover.png,AlbumArtSmall.jpg,AlbumArtwork.png")
-            // TODO: An option to not replace files, but just edit their tags.
         ]);
     let matches = cmd.get_matches();
 
@@ -66,6 +69,14 @@ fn main() {
         .get_one::<PathBuf>("OUTPUT")
         .expect("no output library dir given")
         .to_path_buf();
+    // If the target dir coes not exist, warn the user that it does not exist. Don't just
+    // willy-nilly create it, because they could've made a typo.
+    if !target_library.is_dir() {
+        return Err(ClientError::TargetLibraryDoesNotExist {
+            target_library: target_library.clone(),
+        }
+        .into());
+    }
 
     let v_level = 3;
     let include_album_art = false;
@@ -82,12 +93,25 @@ fn main() {
             )
         })
         .collect::<Vec<_>>();
+
+    // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
+    // with its own ffmpeg thread.
     for file_res in res {
         match file_res {
             Ok(x) => println!("song OK: {:?}", x),
             Err(e) => eprintln!("Error processing a song: {}", e),
         }
     }
+
+    Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
 }
+
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
+pub enum ClientError {
+    #[error("The given target directory '{target_library}' does not (yet) exist. Please make sure the folder exists, even if it is just an empty folder!")]
+    TargetLibraryDoesNotExist { target_library: PathBuf },
+}
+
+//fn write_log(sync_results: &[Result<UpdateType, MusicLibraryError>]) {}

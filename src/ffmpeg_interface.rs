@@ -86,7 +86,7 @@ pub fn transcode_song(
     Ok(())
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum FfmpegError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
@@ -127,7 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn transcode_embedded_album_art() -> Result<(), FfmpegError> {
+    fn transcode_embedded_album_art() -> miette::Result<()> {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_keep_embedded_album_art.mp3".into();
@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn transcode_no_embedded_album_art() -> Result<(), FfmpegError> {
+    fn transcode_no_embedded_album_art() -> miette::Result<()> {
         let file_without_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_never_had_embedded_album_art.mp3".into();
@@ -151,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn transcode_drop_album_art() -> Result<(), FfmpegError> {
+    fn transcode_drop_album_art() -> miette::Result<()> {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_drop_embedded_album_art.mp3".into();
@@ -162,7 +162,7 @@ mod tests {
     }
 
     #[test]
-    fn transcode_embed_external_album_art() -> Result<(), FfmpegError> {
+    fn transcode_embed_external_album_art() -> miette::Result<()> {
         let file_without_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
         let external_artwork_file: PathBuf =

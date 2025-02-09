@@ -214,7 +214,8 @@ pub fn sync_song(
     };
 
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
-    let _ = fs::create_dir_all(
+    // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
+    let a = fs::create_dir_all(
         shadow
             .parent()
             .expect("Cannot create picture in target library"),
@@ -231,7 +232,7 @@ pub fn sync_song(
 
     Ok(how_updated)
 }
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
@@ -239,23 +240,17 @@ pub enum MusicLibraryError {
     #[error("IO error")]
     Io(#[from] io::Error),
 
-    #[error("No albums found in directory {dir}")]
-    NoAlbumsFound { dir: PathBuf },
-
     #[error("Error in calling ffmpeg")]
     Ffmpeg(#[from] FfmpegError),
 }
 
 #[cfg(test)]
 mod tests {
-    use core::time;
-    use std::{fs::File, path::PathBuf, thread::sleep};
-
-    use itertools::Itertools;
-
-    use crate::song::Song;
-
     use super::{songs_without_album_art, Album};
+    use crate::song::Song;
+    use core::time;
+    use itertools::Itertools;
+    use std::{fs::File, path::PathBuf, thread::sleep};
 
     #[test]
     fn has_music_file_changed_based_on_last_modified_time() {
@@ -270,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn sync_song() {
+    fn sync_song() -> miette::Result<()> {
         use super::sync_song as f;
 
         // New song, that doesn't have a shadow copy yet
@@ -282,7 +277,8 @@ mod tests {
         };
         let _ =
             std::fs::remove_file(new_song.get_shadow_filename(&source_library, &target_library));
-        f(&new_song, &source_library, &target_library, 3, false).unwrap();
+        f(&new_song, &source_library, &target_library, 3, false)?;
+        Ok(())
     }
 
     #[test]
