@@ -15,7 +15,7 @@ pub enum UpdateType {
     /// The file is completely new, so everything had to be done from scratch
     New,
     /// Updated because it was modified more recently than the shadow copy
-    SourceIsNewer,
+    Overwritten,
 }
 
 // TODO: Phase out albums, use Song instead.
@@ -208,7 +208,7 @@ pub fn sync_song(
     // Can't change files in place with ffmpeg, so if we need to update then we need to
     // overwrite the file anyway.
     let how_updated = if shadow.exists() {
-        UpdateType::SourceIsNewer
+        UpdateType::Overwritten
     } else {
         UpdateType::New
     };

@@ -1,8 +1,8 @@
 mod ffmpeg_interface;
 mod music_library;
 mod song;
-
 use clap::{arg, value_parser};
+use itertools::{Either, Itertools};
 use music_library::{
     find_albums_in_directory, songs_without_album_art, sync_song, Album, MusicLibraryError,
     UpdateType,
@@ -10,6 +10,10 @@ use music_library::{
 use song::Song;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// What all the individual attempts at syncing are collected into.
+type SyncResults<'a> = Vec<(&'a Song, Result<UpdateType, MusicLibraryError>)>;
+
 fn main() -> miette::Result<()> {
     // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
     let cmd = clap::Command::new("musicsync")
@@ -81,9 +85,11 @@ fn main() -> miette::Result<()> {
     let v_level = 3;
     let include_album_art = false;
 
-    let res = songs
+    // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
+    // with its own ffmpeg thread.
+    let sync_results: SyncResults = songs
         .iter()
-        .map(|song| {
+        .zip(songs.iter().map(|song| {
             sync_song(
                 song,
                 &source_library,
@@ -91,17 +97,12 @@ fn main() -> miette::Result<()> {
                 v_level,
                 include_album_art,
             )
-        })
+        }))
         .collect::<Vec<_>>();
+    summarize(sync_results);
 
-    // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
-    // with its own ffmpeg thread.
-    for file_res in res {
-        match file_res {
-            Ok(x) => println!("song OK: {:?}", x),
-            Err(e) => eprintln!("Error processing a song: {}", e),
-        }
-    }
+    // TODO: Log the final change codes + errors to a file too.
+    // write_log(sync_results);
 
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
@@ -114,4 +115,77 @@ pub enum ClientError {
     TargetLibraryDoesNotExist { target_library: PathBuf },
 }
 
-//fn write_log(sync_results: &[Result<UpdateType, MusicLibraryError>]) {}
+fn summarize(sync_results: SyncResults) -> String {
+    // Might be sorted differently because of parallel execution, so put in order again.
+    let mut unsorted = sync_results;
+    unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
+    let sync_results = unsorted;
+    let mut n_unchanged = 0;
+    let mut n_new = 0;
+    let mut n_overwritten = 0;
+    let mut n_err = 0;
+    let mut error_log = String::new();
+    for (song, r) in sync_results {
+        match r {
+            Ok(update_type) => match update_type {
+                UpdateType::Unchanged => n_unchanged += 1,
+                UpdateType::New => n_new += 1,
+                UpdateType::Overwritten => n_overwritten += 1,
+            },
+            Err(e) => {
+                n_err += 1;
+                error_log.push_str(&format!(
+                    "Error with {}\n{:?}\n",
+                    song.path.display(),
+                    miette::Report::new(e)
+                ))
+            }
+        }
+    }
+    if n_err == 0 {
+        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNo Errors :D", n_new, n_overwritten, n_unchanged)
+    } else {
+        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nFiles with errors: {}\nThe following errors occurred: {}", n_new, n_overwritten, n_unchanged, n_err, error_log)
+    }
+
+    //let (successful, failed): (Vec<_>, Vec<_>) =
+    //    sync_results.iter().partition(|(song, r)| r.is_ok());
+    //let update_statuses = successful
+    //    .iter()
+    //    .map(|(song, r)| (song, r.unwrap()))
+    //    .collect::<Vec<_>>();
+    //let n_new = update_statuses
+    //    .iter()
+    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::New))
+    //    .count();
+    //let n_unchanged = update_statuses
+    //    .iter()
+    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::Unchanged))
+    //    .count();
+    //let n_overwritten = update_statuses
+    //    .iter()
+    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::Overwritten))
+    //    .count();
+    //
+    //let errors = failed
+    //    .iter()
+    //    .map(|(song, r)| (song, r.unwrap_err()))
+    //    .collect::<Vec<_>>();
+    //let error_log = errors
+    //    .iter()
+    //    .map(|(song, e)| {
+    //        format!(
+    //            "
+    //        Error with {}\n{:?}\n",
+    //            song.path.display(),
+    //            miette::Report::new((e))
+    //        )
+    //    })
+    //    .join("\n");
+}
+
+//fn write_log(sync_results: SyncResults) {
+//    // Might be sorted differently because of parallel execution, so put in order again.
+//    let mut unsorted = sync_results;
+//    unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.cmp(i_b));
+//}
