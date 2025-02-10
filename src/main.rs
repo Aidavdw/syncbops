@@ -2,12 +2,13 @@ mod ffmpeg_interface;
 mod music_library;
 mod song;
 use clap::{arg, value_parser};
-use indicatif::ProgressIterator;
+use indicatif::{ParallelProgressIterator, ProgressIterator};
 use itertools::{Either, Itertools};
 use music_library::{
     find_albums_in_directory, songs_without_album_art, sync_song, Album, MusicLibraryError,
     UpdateType,
 };
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -89,18 +90,21 @@ fn main() -> miette::Result<()> {
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
     let sync_results: SyncResults = songs
-        .iter()
+        .par_iter()
         .progress()
-        .zip(songs.iter().map(|song| {
-            sync_song(
+        .map(|song| {
+            (
                 song,
-                &source_library,
-                &target_library,
-                v_level,
-                include_album_art,
+                sync_song(
+                    song,
+                    &source_library,
+                    &target_library,
+                    v_level,
+                    include_album_art,
+                ),
             )
-        }))
-        .collect::<Vec<_>>();
+        })
+        .collect::<SyncResults>();
     print!("{}", summarize(sync_results));
 
     // TODO: Log the final change codes + errors to a file too.
