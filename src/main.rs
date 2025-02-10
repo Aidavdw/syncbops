@@ -2,6 +2,7 @@ mod ffmpeg_interface;
 mod music_library;
 mod song;
 use clap::{arg, value_parser};
+use indicatif::ProgressIterator;
 use itertools::{Either, Itertools};
 use music_library::{
     find_albums_in_directory, songs_without_album_art, sync_song, Album, MusicLibraryError,
@@ -89,6 +90,7 @@ fn main() -> miette::Result<()> {
     // with its own ffmpeg thread.
     let sync_results: SyncResults = songs
         .iter()
+        .progress()
         .zip(songs.iter().map(|song| {
             sync_song(
                 song,
@@ -99,7 +101,7 @@ fn main() -> miette::Result<()> {
             )
         }))
         .collect::<Vec<_>>();
-    summarize(sync_results);
+    print!("{}", summarize(sync_results));
 
     // TODO: Log the final change codes + errors to a file too.
     // write_log(sync_results);
@@ -143,10 +145,12 @@ fn summarize(sync_results: SyncResults) -> String {
         }
     }
     if n_err == 0 {
-        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNo Errors :D", n_new, n_overwritten, n_unchanged)
+        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNo Errors :D\n", n_new, n_overwritten, n_unchanged)
     } else {
-        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nFiles with errors: {}\nThe following errors occurred: {}", n_new, n_overwritten, n_unchanged, n_err, error_log)
+        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nFiles with errors: {}\nThe following errors occurred:\n {}", n_new, n_overwritten, n_unchanged, n_err, error_log)
     }
+
+    // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"
 
     //let (successful, failed): (Vec<_>, Vec<_>) =
     //    sync_results.iter().partition(|(song, r)| r.is_ok());
