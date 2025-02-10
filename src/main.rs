@@ -124,6 +124,10 @@ fn main() -> miette::Result<()> {
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
+
+    // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
+    // the target directory, check if the same filename -prefix exists in the source dir, otherwise
+    // delete it. can re-use find_albums_in_directory()
 }
 
 fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>) -> String {

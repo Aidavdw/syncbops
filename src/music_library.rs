@@ -321,20 +321,42 @@ mod tests {
     }
 
     #[test]
-    fn sync_song() -> miette::Result<()> {
+    fn sync_song_strip_album_art() -> miette::Result<()> {
         use super::sync_song as f;
 
-        // New song, that doesn't have a shadow copy yet
         let source_library: PathBuf = "/home/aida/portable_music/".into();
-        let target_library: PathBuf = "/tmp/target_library".into();
-        let new_song = Song {
+
+        let target_library: PathBuf = "/tmp/target_library1".into();
+        let _ = std::fs::create_dir(&target_library);
+        // New song, that doesn't have a shadow copy yet, strip album art.
+        let new_song_art = Song {
             path: "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into(),
             external_album_art: None,
         };
-        let _ =
-            std::fs::remove_file(new_song.get_shadow_filename(&source_library, &target_library));
+        let _ = std::fs::remove_file(
+            new_song_art.get_shadow_filename(&source_library, &target_library),
+        );
         f(
-            &new_song,
+            &new_song_art,
+            &source_library,
+            &target_library,
+            3,
+            ArtStrategy::None,
+        )?;
+
+        // external art song
+        let new_song_no_art = Song {
+            path: "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3"
+                .into(),
+            external_album_art: Some(
+                "/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into(),
+            ),
+        };
+        let _ = std::fs::remove_file(
+            new_song_no_art.get_shadow_filename(&source_library, &target_library),
+        );
+        f(
+            &new_song_no_art,
             &source_library,
             &target_library,
             3,

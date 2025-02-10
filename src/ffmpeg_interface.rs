@@ -59,7 +59,7 @@ pub fn transcode_song(
         .arg(v_level.to_string());
 
     // TODO: embed artwork if missing
-    if external_art_to_embed.is_some() {
+    if external_art_to_embed.is_some() && include_album_art {
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
         binding
             .arg("-metadata:s:v")
@@ -69,7 +69,7 @@ pub fn transcode_song(
             .arg("-map")
             .arg("0:a")
             .arg("-map")
-            .arg("1");
+            .arg("1:v");
     } else if !include_album_art {
         binding.arg("-vn");
     }
