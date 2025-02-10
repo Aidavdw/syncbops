@@ -178,15 +178,30 @@ pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
     false
 }
 
-pub fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
+pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegError> {
     // If there is an associated album art file, there definitely is album art. If there is
     // not, check if there is embedde art for each file (costlier)
-    albums
-        .par_iter()
+    let songs = albums
+        .iter()
         .filter(|album| album.album_art.is_none())
         .flat_map(|album| album.music_files.clone())
-        .filter(|music_file| !does_file_have_embedded_artwork(music_file).unwrap())
-        .collect()
+        .collect::<Vec<_>>();
+    // Separately run the querying function, because it can error. if it errors, exit the entire
+    // function.
+    // TODO: Return the paths where it resulted in an error too
+    let results = songs
+        .par_iter()
+        .map(|music_file| does_file_have_embedded_artwork(music_file))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let a = songs
+        .iter()
+        .zip(results.iter())
+        .filter(|(_, b)| !**b)
+        .map(|(filename, _)| filename.to_owned())
+        .collect::<Vec<_>>();
+
+    Ok(a)
 }
 
 /// Synchronises the file. Returns true if the file is updated, false it was not.
@@ -280,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn songs_without_album_art_test() {
+    fn songs_without_album_art_test() -> miette::Result<()> {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
 
@@ -295,7 +310,7 @@ mod tests {
                     file_without_embedded_artwork.clone()
                 ],
                 album_art: None
-            }])
+            }])?
             .iter()
             .exactly_one()
             .unwrap(),
@@ -319,7 +334,7 @@ mod tests {
                     ],
                     album_art: None
                 }
-            ])
+            ])?
             .len(),
             2
         );
@@ -341,7 +356,7 @@ mod tests {
                     ],
                     album_art: Some(PathBuf::default())
                 }
-            ])
+            ])?
             .iter()
             .exactly_one()
             .unwrap(),
@@ -354,7 +369,7 @@ mod tests {
                 file_without_embedded_artwork.clone()
             ],
             album_art: Some(PathBuf::default())
-        }])
+        }])?
         .is_empty());
 
         assert!(songs_without_album_art(&[Album {
@@ -363,7 +378,8 @@ mod tests {
                 file_without_embedded_artwork.clone()
             ],
             album_art: Some(PathBuf::default())
-        }])
+        }])?
         .is_empty());
+        Ok(())
     }
 }

@@ -50,7 +50,7 @@ fn main() -> miette::Result<()> {
         albums.len()
     );
     // Report if there are songs without album art.
-    let songs_without_album_art = songs_without_album_art(&albums);
+    let songs_without_album_art = songs_without_album_art(&albums)?;
     if !songs_without_album_art.is_empty() {
         println!("Warning! There are songs without any album art (embedded or found in Cover.jpg, folder.png, etc:");
         for x in songs_without_album_art {
