@@ -204,13 +204,26 @@ pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegE
     Ok(a)
 }
 
+/// How to handle album art
+#[derive(Clone, Copy, PartialEq)]
+pub enum ArtStrategy {
+    /// Remove all embedded album art, and don't copy album art files.
+    None,
+    /// Embeds album art in all files. Might take up more space!
+    EmbedAll,
+    /// If there is a cover.jpg etc, use that. Otherwise, use embedded art.
+    PreferFile,
+    /// Discard all embedded art, only keep cover.jpg
+    FileOnly,
+}
+
 /// Synchronises the file. Returns true if the file is updated, false it was not.
 pub fn sync_song(
     song: &Song,
     source_library: &Path,
     target_library: &Path,
     v_level: u32,
-    include_album_art: bool,
+    art_strategy: ArtStrategy,
 ) -> Result<UpdateType, MusicLibraryError> {
     // Early exit if it doesn't need to be updated.
     let shadow = song.get_shadow_filename(source_library, target_library);
@@ -235,16 +248,46 @@ pub fn sync_song(
     );
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
+    let embed_external_artwork = match art_strategy {
+        ArtStrategy::None => false,
+        ArtStrategy::EmbedAll => {
+            !does_file_have_embedded_artwork(&song.path)? && song.external_album_art.is_some()
+        }
+        ArtStrategy::PreferFile => false,
+        ArtStrategy::FileOnly => false,
+    };
     transcode_song(
         &song.path,
         &shadow,
         v_level,
-        include_album_art,
+        embed_external_artwork,
         song.external_album_art.as_deref(),
     )?;
 
     Ok(how_updated)
 }
+
+/// Returns the path to the new cover art if the file is copied over.
+pub fn copy_dedicated_cover_art_for_song(
+    song: &Song,
+    source_library: &Path,
+    target_library: &Path,
+) -> Result<Option<PathBuf>, MusicLibraryError> {
+    let Some(path) = &song.external_album_art else {
+        return Ok(None);
+    };
+
+    let relative_path = path.strip_prefix(source_library).unwrap();
+    let shadow = target_library.join(relative_path);
+    // TODO: Return error on something that is not a "file already exists"
+    if !fs::exists(&shadow).unwrap() {
+        let a = std::fs::copy(path, &shadow);
+        Ok(Some(shadow))
+    } else {
+        Ok(None)
+    }
+}
+
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
@@ -260,7 +303,7 @@ pub enum MusicLibraryError {
 #[cfg(test)]
 mod tests {
     use super::{songs_without_album_art, Album};
-    use crate::song::Song;
+    use crate::{music_library::ArtStrategy, song::Song};
     use core::time;
     use itertools::Itertools;
     use std::{fs::File, path::PathBuf, thread::sleep};
@@ -290,7 +333,13 @@ mod tests {
         };
         let _ =
             std::fs::remove_file(new_song.get_shadow_filename(&source_library, &target_library));
-        f(&new_song, &source_library, &target_library, 3, false)?;
+        f(
+            &new_song,
+            &source_library,
+            &target_library,
+            3,
+            ArtStrategy::None,
+        )?;
         Ok(())
     }
 

@@ -3,8 +3,10 @@ mod music_library;
 mod song;
 use clap::{arg, value_parser};
 use indicatif::ParallelProgressIterator;
+use itertools::Itertools;
 use music_library::{
-    find_albums_in_directory, songs_without_album_art, sync_song, MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_albums_in_directory, songs_without_album_art,
+    sync_song, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -82,7 +84,7 @@ fn main() -> miette::Result<()> {
     }
 
     let v_level = 3;
-    let include_album_art = false;
+    let art_strategy = music_library::ArtStrategy::PreferFile;
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
@@ -97,12 +99,24 @@ fn main() -> miette::Result<()> {
                     &source_library,
                     &target_library,
                     v_level,
-                    include_album_art,
+                    art_strategy,
                 ),
             )
         })
         .collect::<SyncResults>();
-    print!("{}", summarize(sync_results));
+
+    // Go over all the dedicated album art.
+    // If there is a dedicated art file for the music file, add it. If it already exists, it is probably already added by another file
+    let new_cover_arts = songs
+        .iter()
+        .map(|song| copy_dedicated_cover_art_for_song(song, &source_library, &target_library))
+        .collect::<Result<Vec<_>, _>>()?
+        .iter()
+        .filter(|o| o.is_some())
+        .map(|o| o.to_owned().unwrap())
+        .collect::<Vec<_>>();
+
+    print!("{}", summarize(sync_results, new_cover_arts));
 
     // TODO: Log the final change codes + errors to a file too.
     // write_log(sync_results);
@@ -112,7 +126,7 @@ fn main() -> miette::Result<()> {
     // reading their tags, and link it if the album does not yet have art set.
 }
 
-fn summarize(sync_results: SyncResults) -> String {
+fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>) -> String {
     // Might be sorted differently because of parallel execution, so put in order again.
     let mut unsorted = sync_results;
     unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
@@ -140,9 +154,9 @@ fn summarize(sync_results: SyncResults) -> String {
         }
     }
     if n_err == 0 {
-        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNo Errors :D\n", n_new, n_overwritten, n_unchanged)
+        format!("====== Summary of synchronisation ======\nNew songs: {}\nChanged songs (overwritten): {}\nUnchanged songs: {}\nNew album art: {}\nNo Errors :D\n", n_new, n_overwritten, n_unchanged, new_cover_arts.len())
     } else {
-        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nFiles with errors: {}\nThe following errors occurred:\n {}", n_new, n_overwritten, n_unchanged, n_err, error_log)
+        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNew album art: {}\nFiles with errors: {}\nThe following errors occurred:\n {}", n_new, n_overwritten, n_unchanged, new_cover_arts.len(), n_err, error_log)
     }
 
     // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"

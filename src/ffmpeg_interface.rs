@@ -4,6 +4,8 @@ use std::{
     process::Command,
 };
 
+use crate::music_library::ArtStrategy;
+
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
     let mut binding = Command::new("ffprobe");
@@ -31,16 +33,12 @@ pub fn transcode_song(
     target: &Path,
     v_level: u32,
     include_album_art: bool,
-    external_album_art: Option<&Path>,
+    external_art_to_embed: Option<&Path>,
 ) -> Result<(), FfmpegError> {
     debug_assert!(
         v_level < 9,
         "Presets for v-level compression only go up to 9. Be sure to sanitise input."
     );
-
-    let embed_external_artwork = include_album_art
-        && !does_file_have_embedded_artwork(source)?
-        && external_album_art.is_some();
 
     let mut binding = Command::new("ffmpeg");
     binding
@@ -48,10 +46,12 @@ pub fn transcode_song(
         .arg("-i")
         .arg(source);
 
-    if embed_external_artwork {
-        // safe to unwrap, already checked before.
-        binding.arg("-i").arg(external_album_art.unwrap());
-    };
+    if include_album_art {
+        if let Some(path) = external_art_to_embed {
+            binding.arg("-i").arg(path);
+        }
+    }
+
     binding
         .arg("-codec:a")
         .arg("libmp3lame")
@@ -59,7 +59,7 @@ pub fn transcode_song(
         .arg(v_level.to_string());
 
     // TODO: embed artwork if missing
-    if embed_external_artwork {
+    if external_art_to_embed.is_some() {
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
         binding
             .arg("-metadata:s:v")
@@ -97,9 +97,6 @@ pub fn transcode_song(
             msg,
         });
     }
-    //if does_file_have_embedded_artwork(source) {
-    //
-    //}
     Ok(())
 }
 
