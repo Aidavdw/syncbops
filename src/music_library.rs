@@ -1,12 +1,10 @@
-use rayon::prelude::*;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-
 use crate::ffmpeg_interface::does_file_have_embedded_artwork;
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::song::Song;
+use rayon::prelude::*;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum UpdateType {
@@ -187,7 +185,7 @@ pub fn songs_without_album_art(albums: &[Album]) -> Vec<PathBuf> {
         .par_iter()
         .filter(|album| album.album_art.is_none())
         .flat_map(|album| album.music_files.clone())
-        .filter(|music_file| !does_file_have_embedded_artwork(music_file))
+        .filter(|music_file| !does_file_have_embedded_artwork(music_file).unwrap())
         .collect()
 }
 
@@ -237,11 +235,11 @@ pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
 
-    #[error("IO error")]
-    Io(#[from] io::Error),
-
     #[error("Error in calling ffmpeg")]
     Ffmpeg(#[from] FfmpegError),
+
+    #[error("The given target directory '{target_library}' does not (yet) exist. Please make sure the folder exists, even if it is just an empty folder!")]
+    TargetLibraryDoesNotExist { target_library: PathBuf },
 }
 
 #[cfg(test)]

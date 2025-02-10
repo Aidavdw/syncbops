@@ -2,16 +2,13 @@ mod ffmpeg_interface;
 mod music_library;
 mod song;
 use clap::{arg, value_parser};
-use indicatif::{ParallelProgressIterator, ProgressIterator};
-use itertools::{Either, Itertools};
+use indicatif::ParallelProgressIterator;
 use music_library::{
-    find_albums_in_directory, songs_without_album_art, sync_song, Album, MusicLibraryError,
-    UpdateType,
+    find_albums_in_directory, songs_without_album_art, sync_song, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<UpdateType, MusicLibraryError>)>;
@@ -43,7 +40,7 @@ fn main() -> miette::Result<()> {
         .to_path_buf();
 
     println!("Discovering files in {}", source_library.display());
-    let albums = find_albums_in_directory(&source_library).unwrap();
+    let albums = find_albums_in_directory(&source_library)?;
     println!(
         "Discovered {} songs in {} folders.",
         albums
@@ -78,7 +75,7 @@ fn main() -> miette::Result<()> {
     // If the target dir coes not exist, warn the user that it does not exist. Don't just
     // willy-nilly create it, because they could've made a typo.
     if !target_library.is_dir() {
-        return Err(ClientError::TargetLibraryDoesNotExist {
+        return Err(MusicLibraryError::TargetLibraryDoesNotExist {
             target_library: target_library.clone(),
         }
         .into());
@@ -115,12 +112,6 @@ fn main() -> miette::Result<()> {
     // reading their tags, and link it if the album does not yet have art set.
 }
 
-#[derive(thiserror::Error, Debug, miette::Diagnostic)]
-pub enum ClientError {
-    #[error("The given target directory '{target_library}' does not (yet) exist. Please make sure the folder exists, even if it is just an empty folder!")]
-    TargetLibraryDoesNotExist { target_library: PathBuf },
-}
-
 fn summarize(sync_results: SyncResults) -> String {
     // Might be sorted differently because of parallel execution, so put in order again.
     let mut unsorted = sync_results;
@@ -155,45 +146,4 @@ fn summarize(sync_results: SyncResults) -> String {
     }
 
     // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"
-
-    //let (successful, failed): (Vec<_>, Vec<_>) =
-    //    sync_results.iter().partition(|(song, r)| r.is_ok());
-    //let update_statuses = successful
-    //    .iter()
-    //    .map(|(song, r)| (song, r.unwrap()))
-    //    .collect::<Vec<_>>();
-    //let n_new = update_statuses
-    //    .iter()
-    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::New))
-    //    .count();
-    //let n_unchanged = update_statuses
-    //    .iter()
-    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::Unchanged))
-    //    .count();
-    //let n_overwritten = update_statuses
-    //    .iter()
-    //    .filter(|(_, update_type)| matches!(update_type, UpdateType::Overwritten))
-    //    .count();
-    //
-    //let errors = failed
-    //    .iter()
-    //    .map(|(song, r)| (song, r.unwrap_err()))
-    //    .collect::<Vec<_>>();
-    //let error_log = errors
-    //    .iter()
-    //    .map(|(song, e)| {
-    //        format!(
-    //            "
-    //        Error with {}\n{:?}\n",
-    //            song.path.display(),
-    //            miette::Report::new((e))
-    //        )
-    //    })
-    //    .join("\n");
 }
-
-//fn write_log(sync_results: SyncResults) {
-//    // Might be sorted differently because of parallel execution, so put in order again.
-//    let mut unsorted = sync_results;
-//    unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.cmp(i_b));
-//}

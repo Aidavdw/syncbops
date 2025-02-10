@@ -1,20 +1,28 @@
-use std::ffi::OsString;
-use std::io::{Seek, SeekFrom, Write};
+use itertools::Itertools;
 use std::{
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
-use itertools::Itertools;
-
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
-pub fn does_file_have_embedded_artwork(path: &Path) -> bool {
-    let ffprobe = Command::new("ffprobe").arg(path).output().unwrap();
+pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
+    let mut binding = Command::new("ffprobe");
+    binding.arg(path);
+    let arguments = binding
+        .get_args()
+        .map(|osstr| osstr.to_string_lossy())
+        .join(" ");
+    let ffprobe = binding
+        .output()
+        .map_err(|e| FfmpegError::CheckForAlbumArtCommand {
+            source: e,
+            arguments,
+        })?;
     let txt = String::from_utf8(ffprobe.stderr).unwrap();
     // TODO: Instead, check if it has a video stream: If the title is different (the default for
     // ffmpeg is "other") then it won't recognise it.
     //TODO: Increase test coverage, to see if this works with .m4a, FLAC, etc.
-    txt.contains("Cover")
+    Ok(txt.contains("Cover"))
 }
 
 /// Takes a path of a song file, transcodes it using ffmpeg, and saves it to the target path. Returns the path of the output file. Like `ffmpeg -i [input file] -codec:a libmp3lame -q:a [V-level] [output file].mp3`
@@ -31,7 +39,7 @@ pub fn transcode_song(
     );
 
     let embed_external_artwork = include_album_art
-        && !does_file_have_embedded_artwork(source)
+        && !does_file_have_embedded_artwork(source)?
         && external_album_art.is_some();
 
     let mut binding = Command::new("ffmpeg");
@@ -66,17 +74,26 @@ pub fn transcode_song(
         binding.arg("-vn");
     }
 
-    let cmd = binding.arg(target);
-    let output = cmd.output()?;
+    binding.arg(target);
+    let arguments = binding
+        .get_args()
+        .map(|osstr| osstr.to_string_lossy())
+        .join(" ");
+    let output = binding
+        .output()
+        .map_err(|e| FfmpegError::TranscodeCommand {
+            source: e,
+            arguments,
+        })?;
     if !output.status.success() {
         let cmd_txt = binding
             .get_args()
             .map(|osstr| osstr.to_string_lossy())
             .join(" ");
         let msg = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(FfmpegError::Transcode {
+        return Err(FfmpegError::FfmpegNotSuccesful {
             file: source.into(),
-            cmd: cmd_txt,
+            arguments: cmd_txt,
             msg,
         });
     }
@@ -88,42 +105,47 @@ pub fn transcode_song(
 
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum FfmpegError {
-    #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
-    NotADirectory { path: PathBuf },
-
     #[error(
-        "Could not transcode file {file}:\nTried calling: ffmpeg {cmd}\nOutput of ffmpeg:\n{msg} "
+        "ffmpeg exited with a failure code for file {file}. Tried calling `ffmpeg {arguments}`. Output of ffmpeg: {msg} "
     )]
-    Transcode {
+    FfmpegNotSuccesful {
         file: PathBuf,
-        cmd: String,
+        arguments: String,
         msg: String,
     },
 
-    #[error("IO error")]
-    Io(#[from] std::io::Error),
+    #[error("could not run the command to transcode a music file. Ran ffmpeg with arguments `{arguments}`: {source}")]
+    TranscodeCommand {
+        source: std::io::Error,
+        arguments: String,
+    },
 
-    #[error("No albums found in directory {dir}")]
-    NoAlbumsFound { dir: PathBuf },
+    #[error("could not use ffmpeg to check for album art. Ran ffmpeg with arguments `{arguments}`: {source}")]
+    CheckForAlbumArtCommand {
+        source: std::io::Error,
+        arguments: String,
+    },
 }
 
 #[cfg(test)]
 mod tests {
+    use super::{does_file_have_embedded_artwork, transcode_song};
     use std::path::PathBuf;
 
-    use super::{does_file_have_embedded_artwork, transcode_song, FfmpegError};
-
     #[test]
-    fn embedded_artwork() {
+    fn embedded_artwork() -> miette::Result<()> {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
-        assert!(does_file_have_embedded_artwork(&file_with_embedded_artwork));
+        assert!(does_file_have_embedded_artwork(
+            &file_with_embedded_artwork
+        )?);
 
         let file_without_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
         assert!(!does_file_have_embedded_artwork(
             &file_without_embedded_artwork
-        ))
+        )?);
+        Ok(())
     }
 
     #[test]
@@ -132,7 +154,7 @@ mod tests {
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_keep_embedded_album_art.mp3".into();
         transcode_song(&file_with_embedded_artwork, &target, 3, true, None)?;
-        assert!(does_file_have_embedded_artwork(&target));
+        assert!(does_file_have_embedded_artwork(&target)?);
 
         Ok(())
     }
@@ -145,7 +167,7 @@ mod tests {
         transcode_song(&file_without_embedded_artwork, &target, 3, true, None)?;
         // TODO: Throw an error if you include_album_art, but the final file is not able to embed
         // album art.
-        assert!(!does_file_have_embedded_artwork(&target));
+        assert!(!does_file_have_embedded_artwork(&target)?);
 
         Ok(())
     }
@@ -156,7 +178,7 @@ mod tests {
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_drop_embedded_album_art.mp3".into();
         transcode_song(&file_with_embedded_artwork, &target, 3, false, None)?;
-        assert!(!does_file_have_embedded_artwork(&target));
+        assert!(!does_file_have_embedded_artwork(&target)?);
 
         Ok(())
     }
@@ -175,7 +197,7 @@ mod tests {
             true,
             Some(&external_artwork_file),
         )?;
-        assert!(does_file_have_embedded_artwork(&target));
+        assert!(does_file_have_embedded_artwork(&target)?);
 
         Ok(())
     }
