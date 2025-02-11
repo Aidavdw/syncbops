@@ -223,6 +223,7 @@ pub fn sync_song(
     v_level: u64,
     art_strategy: ArtStrategy,
     force: bool,
+    dry_run: bool,
 ) -> Result<UpdateType, MusicLibraryError> {
     // Early exit if it doesn't need to be updated.
     // Can't change files in place with ffmpeg, so if we need to update then we need to
@@ -244,13 +245,15 @@ pub fn sync_song(
         ArtStrategy::PreferFile => song.external_album_art.is_none(),
         ArtStrategy::FileOnly => false,
     };
-    transcode_song(
-        &song.path,
-        &shadow,
-        v_level,
-        embed_art,
-        song.external_album_art.as_deref(),
-    )?;
+    if !dry_run {
+        transcode_song(
+            &song.path,
+            &shadow,
+            v_level,
+            embed_art,
+            song.external_album_art.as_deref(),
+        )?
+    };
 
     Ok(how_updated)
 }
@@ -260,6 +263,7 @@ pub fn copy_dedicated_cover_art_for_song(
     song: &Song,
     source_library: &Path,
     target_library: &Path,
+    dry_run: bool,
 ) -> Result<Option<PathBuf>, MusicLibraryError> {
     let Some(path) = &song.external_album_art else {
         return Ok(None);
@@ -269,7 +273,9 @@ pub fn copy_dedicated_cover_art_for_song(
     let shadow = target_library.join(relative_path);
     // TODO: Return error on something that is not a "file already exists"
     if !fs::exists(&shadow).unwrap() {
-        let _ = std::fs::copy(path, &shadow);
+        if !dry_run {
+            let _ = std::fs::copy(path, &shadow);
+        }
         Ok(Some(shadow))
     } else {
         Ok(None)
@@ -331,6 +337,7 @@ mod tests {
             &target_library,
             3,
             art_strategy,
+            false,
             false,
         )?;
 

@@ -38,13 +38,20 @@ struct Cli {
     /// Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
     #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
     embed_art_resolution: u64,
-    // TODO: Add dry-run option.
+
+    /// Don't actually make any changes to the filesystem, just report on what it would look like after the operation. Makes most sense to run together with verbose option.
+    #[arg(short, long, default_value_t = false)]
+    dry_run: bool,
 }
 
 fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let source_library = cli.source_library;
     let target_library = cli.target_library;
+
+    if cli.dry_run {
+        println!("Performing a dry run, so no actual changes will be made to the filesystem.")
+    }
 
     println!("Discovering files in {}", source_library.display());
     let albums = find_albums_in_directory(&source_library)?;
@@ -106,6 +113,7 @@ fn main() -> miette::Result<()> {
                     v_level,
                     art_strategy,
                     cli.force,
+                    cli.dry_run,
                 ),
             )
         })
@@ -113,10 +121,12 @@ fn main() -> miette::Result<()> {
 
     // Go over all the dedicated album art.
     // If there is a dedicated art file for the music file, add it. If it already exists, it is probably already added by another file
-    println!("Checking copying external cover art...");
+    println!("Checking and copying external cover art...");
     let new_cover_arts = songs
         .iter()
-        .map(|song| copy_dedicated_cover_art_for_song(song, &source_library, &target_library))
+        .map(|song| {
+            copy_dedicated_cover_art_for_song(song, &source_library, &target_library, cli.dry_run)
+        })
         .collect::<Result<Vec<_>, _>>()?
         .iter()
         .filter_map(|o| o.to_owned())
