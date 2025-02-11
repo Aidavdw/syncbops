@@ -8,15 +8,14 @@ use std::{
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
     let mut binding = Command::new("ffprobe");
     binding.arg(path);
-    let arguments = binding
-        .get_args()
-        .map(|osstr| osstr.to_string_lossy())
-        .join(" ");
     let ffprobe = binding
         .output()
         .map_err(|e| FfmpegError::CheckForAlbumArtCommand {
             source: e,
-            arguments,
+            arguments: binding
+                .get_args()
+                .map(|osstr| osstr.to_string_lossy())
+                .join(" "),
         })?;
     let txt = String::from_utf8(ffprobe.stderr).unwrap();
     // TODO: Instead, check if it has a video stream: If the title is different (the default for
@@ -72,15 +71,14 @@ pub fn transcode_song(
     }
 
     binding.arg(target);
-    let arguments = binding
-        .get_args()
-        .map(|osstr| osstr.to_string_lossy())
-        .join(" ");
     let output = binding
         .output()
         .map_err(|e| FfmpegError::TranscodeCommand {
             source: e,
-            arguments,
+            arguments: binding
+                .get_args()
+                .map(|osstr| osstr.to_string_lossy())
+                .join(" "),
         })?;
     if !output.status.success() {
         let cmd_txt = binding
