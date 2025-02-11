@@ -2,6 +2,7 @@ use crate::ffmpeg_interface::does_file_have_embedded_artwork;
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::song::Song;
+use indicatif::ProgressIterator;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -69,7 +70,10 @@ fn is_image_file_album_art(path: &Path) -> bool {
     stem_is_allowed && has_right_extension
 }
 
-pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibraryError> {
+pub fn find_albums_in_directory(
+    path: &PathBuf,
+    verbose: bool,
+) -> Result<Vec<Album>, MusicLibraryError> {
     // Iterate through the folders. If there is a music file here, then this should be an
     // album.
     // if there are no music files here, then go some level deeper, because there might be
@@ -112,7 +116,7 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
         .path();
         if sub_path.is_dir() {
             // Recurse
-            match find_albums_in_directory(&sub_path) {
+            match find_albums_in_directory(&sub_path, verbose) {
                 Ok(albums_in_sub_dir) => albums.extend(albums_in_sub_dir),
                 Err(e) => eprintln!(
                     "Error in processing sub-directory of {}: {}",
@@ -122,7 +126,9 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
             }
         } else {
             let Some(filetype) = identify_file_type(&sub_path) else {
-                println!("Ignoring file {}", sub_path.display());
+                if verbose {
+                    println!("Ignoring file {}", sub_path.display());
+                }
                 continue;
             };
             match filetype {
@@ -181,6 +187,7 @@ pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegE
     // not, check if there is embedde art for each file (costlier)
     let songs = albums
         .iter()
+        .progress()
         .filter(|album| album.album_art.is_none())
         .flat_map(|album| album.music_files.clone())
         .collect::<Vec<_>>();

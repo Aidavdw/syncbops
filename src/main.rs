@@ -58,7 +58,7 @@ fn main() -> miette::Result<()> {
     }
 
     println!("Discovering files in {}", source_library.display());
-    let albums = find_albums_in_directory(&source_library)?;
+    let albums = find_albums_in_directory(&source_library, cli.verbose)?;
     println!(
         "Discovered {} songs in {} folders.",
         albums
@@ -68,6 +68,7 @@ fn main() -> miette::Result<()> {
         albums.len()
     );
     // Report if there are songs without album art.
+    println!("Checking for songs without album art...");
     let songs_without_album_art = songs_without_album_art(&albums)?;
     if !songs_without_album_art.is_empty() {
         println!("Warning! There are songs without any album art (either embedded or found in Cover.jpg, folder.png, etc:");
@@ -161,7 +162,11 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     let mut n_new = 0;
     let mut n_overwritten = 0;
     let mut n_err = 0;
-    let mut error_messages = String::with_capacity(4000);
+    let mut error_messages = if verbose {
+        String::with_capacity(50000)
+    } else {
+        String::new()
+    };
     let mut song_updates = String::new();
     for (song, r) in sync_results {
         match r {
@@ -171,7 +176,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     UpdateType::New => n_new += 1,
                     UpdateType::Overwritten => n_overwritten += 1,
                 };
-                song_updates.push_str(&format!("{} →  [{:?}]", song.path.display(), update_type))
+                song_updates.push_str(&format!("{} →  [{:?}]\n", song.path.display(), update_type))
             }
             Err(e) => {
                 n_err += 1;
@@ -180,7 +185,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     song.path.display(),
                     miette::Report::new(e)
                 );
-                error_messages.push_str(&err_msg)
+                error_messages.push_str(err_msg)
             }
         }
     }
