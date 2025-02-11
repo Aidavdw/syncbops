@@ -248,19 +248,17 @@ pub fn sync_song(
     );
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
-    let embed_external_artwork = match art_strategy {
+    let embed_art = match art_strategy {
         ArtStrategy::None => false,
-        ArtStrategy::EmbedAll => {
-            !does_file_have_embedded_artwork(&song.path)? && song.external_album_art.is_some()
-        }
-        ArtStrategy::PreferFile => false,
+        ArtStrategy::EmbedAll => true,
+        ArtStrategy::PreferFile => song.external_album_art.is_none(),
         ArtStrategy::FileOnly => false,
     };
     transcode_song(
         &song.path,
         &shadow,
         v_level,
-        embed_external_artwork,
+        embed_art,
         song.external_album_art.as_deref(),
     )?;
 
