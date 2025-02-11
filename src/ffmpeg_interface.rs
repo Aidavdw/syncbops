@@ -4,8 +4,6 @@ use std::{
     process::Command,
 };
 
-use crate::music_library::ArtStrategy;
-
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
     let mut binding = Command::new("ffprobe");

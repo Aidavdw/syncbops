@@ -6,7 +6,7 @@ use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum UpdateType {
     /// The file did not need to be changed, as it is up-to-date
     Unchanged,
@@ -303,7 +303,11 @@ pub enum MusicLibraryError {
 #[cfg(test)]
 mod tests {
     use super::{songs_without_album_art, Album};
-    use crate::{music_library::ArtStrategy, song::Song};
+    use crate::{
+        ffmpeg_interface::does_file_have_embedded_artwork,
+        music_library::{ArtStrategy, UpdateType},
+        song::Song,
+    };
     use core::time;
     use itertools::Itertools;
     use std::{fs::File, path::PathBuf, thread::sleep};
@@ -320,50 +324,290 @@ mod tests {
         assert!(f(&newer_file, &older_file));
     }
 
-    #[test]
-    fn sync_song_strip_album_art() -> miette::Result<()> {
-        use super::sync_song as f;
+    fn sync_song_test(
+        identifier: &str,
+        song: Song,
+        art_strategy: ArtStrategy,
+    ) -> miette::Result<()> {
+        use super::sync_song;
 
         let source_library: PathBuf = "/home/aida/portable_music/".into();
-
-        let target_library: PathBuf = "/tmp/target_library1".into();
+        let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
-        // New song, that doesn't have a shadow copy yet, strip album art.
-        let new_song_art = Song {
-            path: "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into(),
-            external_album_art: None,
-        };
-        let _ = std::fs::remove_file(
-            new_song_art.get_shadow_filename(&source_library, &target_library),
-        );
-        f(
-            &new_song_art,
-            &source_library,
-            &target_library,
-            3,
-            ArtStrategy::None,
-        )?;
+        // Delete anything that's already there, because we wanna test it if it's a new file.
+        let target = song.get_shadow_filename(&source_library, &target_library);
+        let _ = std::fs::remove_file(&target);
+        let updated = sync_song(&song, &source_library, &target_library, 3, art_strategy)?;
 
-        // external art song
-        let new_song_no_art = Song {
-            path: "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3"
-                .into(),
-            external_album_art: Some(
-                "/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into(),
+        assert!(updated == UpdateType::New);
+        match art_strategy {
+            ArtStrategy::None => assert!(
+                !does_file_have_embedded_artwork(&target)?,
+                "Art strategy is to have no artwork yet there is embedded artwork."
             ),
-        };
-        let _ = std::fs::remove_file(
-            new_song_no_art.get_shadow_filename(&source_library, &target_library),
-        );
-        f(
-            &new_song_no_art,
-            &source_library,
-            &target_library,
-            3,
-            ArtStrategy::None,
-        )?;
+            ArtStrategy::EmbedAll => {
+                // Can't have any artwork if there never was any.
+                if song.has_artwork()? {
+                    assert!(
+                        does_file_have_embedded_artwork(&target)?,
+                        "ArtStrategy::EmbedAll, yet no embedded artwork.."
+                    )
+                }
+            }
+            ArtStrategy::PreferFile => {
+                if song.external_album_art.is_some() {
+                    assert!(
+                        !does_file_have_embedded_artwork(&target)?,
+                        "If song has dedicated artwork, it should copy it over with this ArtStrategy, and not embed it."
+                    )
+                } else if does_file_have_embedded_artwork(&song.path)? {
+                    assert!(does_file_have_embedded_artwork(&target)?, "Even though not preferred option, should still retain artwork that was already embedded")
+                }
+            }
+            ArtStrategy::FileOnly => {
+                assert!(
+                    !does_file_have_embedded_artwork(&target)?,
+                    "If File Only, should not have any embedded artwork."
+                )
+            }
+        }
+
+        // The it should not be overwritten if
         Ok(())
     }
+
+    fn with_embedded_album_art() -> PathBuf {
+        "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into()
+    }
+
+    fn without_art() -> PathBuf {
+        "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3".into()
+    }
+
+    fn external_art() -> Option<PathBuf> {
+        Some("/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into())
+    }
+
+    // ART STRATEGY = NONE
+
+    #[test]
+    /// Song with embedded album art, no external, art strategy = none.
+    fn sync_song_artstrat_none_embedded_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_none/embedded",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::None,
+        )
+    }
+
+    #[test]
+    /// Song with external art only, art strategy = none
+    fn sync_song_artstrat_none_external_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_none/external",
+            Song {
+                path: without_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::None,
+        )
+    }
+
+    #[test]
+    /// Song with no art at all, art strategy = none
+    fn sync_song_artstrat_none_no_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_none/no-art",
+            Song {
+                path: without_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::None,
+        )
+    }
+
+    #[test]
+    /// Song with both embedded and external art, art strategy = none.
+    fn sync_song_artstrat_none_both() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_none/both",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::None,
+        )
+    }
+
+    // END ART STRATEGY = NONE
+    // ART STRATEGY = EMBED ALL
+
+    #[test]
+    /// Song with embedded album art, no external, art strategy = none.
+    fn sync_song_artstrat_embed_embedded_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_embed/embedded",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::EmbedAll,
+        )
+    }
+
+    #[test]
+    /// Song with external art only, art strategy = none
+    fn sync_song_artstrat_embed_external_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_embed/external",
+            Song {
+                path: without_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::EmbedAll,
+        )
+    }
+
+    #[test]
+    /// Song with no art at all, art strategy = none
+    fn sync_song_artstrat_embed_no_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_embed/no-art",
+            Song {
+                path: without_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::EmbedAll,
+        )
+    }
+
+    #[test]
+    /// Song with both embedded and external art, art strategy = none.
+    fn sync_song_artstrat_embed_both() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_embed/both",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::EmbedAll,
+        )
+    }
+
+    // END ART STRATEGY = EMBED ALL
+    // ART STRATEGY = PREFER_FILE
+
+    #[test]
+    /// Song with embedded album art, no external, art strategy = prefer file.
+    fn sync_song_artstrat_prefer_file_embedded_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_prefer_file/embedded",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::PreferFile,
+        )
+    }
+
+    #[test]
+    /// Song with external art only, art strategy = prefer_file
+    fn sync_song_artstrat_prefer_file_external_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_prefer_file/external",
+            Song {
+                path: without_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::PreferFile,
+        )
+    }
+
+    #[test]
+    /// Song with no art at all, art strategy = prefer_file
+    fn sync_song_artstrat_prefer_file_no_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_prefer_file/no-art",
+            Song {
+                path: without_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::PreferFile,
+        )
+    }
+
+    #[test]
+    /// Song with both embedded and external art, art strategy = prefer_file.
+    fn sync_song_artstrat_prefer_file_both() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_prefer_file/both",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::PreferFile,
+        )
+    }
+
+    // END ART STRATEGY = PREFER_FILE
+    // ART STRATEGY = FILE_ONLY
+
+    #[test]
+    /// Song with embedded album art, no external, art strategy = file_only.
+    fn sync_song_artstrat_file_only_embedded_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_file_only/embedded",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::FileOnly,
+        )
+    }
+
+    #[test]
+    /// Song with external art only, art strategy = file_only
+    fn sync_song_artstrat_file_only_external_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_file_only/external",
+            Song {
+                path: without_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::FileOnly,
+        )
+    }
+
+    #[test]
+    /// Song with no art at all, art strategy = file_only
+    fn sync_song_artstrat_file_only_no_art() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_file_only/no-art",
+            Song {
+                path: without_art(),
+                external_album_art: None,
+            },
+            ArtStrategy::FileOnly,
+        )
+    }
+
+    #[test]
+    /// Song with both embedded and external art, art strategy = file_only.
+    fn sync_song_artstrat_file_only_both() -> miette::Result<()> {
+        sync_song_test(
+            "artstrat_file_only/both",
+            Song {
+                path: with_embedded_album_art(),
+                external_album_art: external_art(),
+            },
+            ArtStrategy::FileOnly,
+        )
+    }
+
+    // END ART STRATEGY = FILE_ONLY
 
     #[test]
     fn songs_without_album_art_test() -> miette::Result<()> {

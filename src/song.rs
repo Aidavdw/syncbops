@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    ffmpeg_interface::{transcode_song, FfmpegError},
+    ffmpeg_interface::{does_file_have_embedded_artwork, transcode_song, FfmpegError},
     music_library::{has_music_file_changed, MusicLibraryError, UpdateType},
 };
 
@@ -25,5 +25,12 @@ impl Song {
             .strip_prefix(source_library)
             .unwrap()
             .to_path_buf()
+    }
+
+    pub fn has_artwork(&self) -> Result<bool, FfmpegError> {
+        if self.external_album_art.is_some() {
+            return Ok(true);
+        }
+        does_file_have_embedded_artwork(&self.path)
     }
 }
