@@ -27,17 +27,13 @@ struct Cli {
     #[arg(short, long, value_name = "LEVEL", default_value_t = 3)]
     compression_level: u64,
 
-    /// TODO: Force overwriting existing files
+    /// Force overwriting existing music files. Does not affect external album art files.
     #[arg(short, long, default_value_t = false)]
     force: bool,
 
     /// How to handle album art
     #[arg(short, long, value_name = "STRATEGY", default_value = "prefer-file")]
     art_strategy: ArtStrategy,
-
-    /// TODO: Implement? not sure if still needed??  Preserve target folder files, even if they don't exist in source dir
-    #[arg(short, long, default_value_t = false)]
-    preserve: bool,
 
     /// Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
     #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
@@ -94,6 +90,9 @@ fn main() -> miette::Result<()> {
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
     println!("Synchronising music files...");
+    if cli.force {
+        println!("Forced re-writing every music file.")
+    }
     let sync_results: SyncResults = songs
         .par_iter()
         .progress()
@@ -106,6 +105,7 @@ fn main() -> miette::Result<()> {
                     &target_library,
                     v_level,
                     art_strategy,
+                    cli.force,
                 ),
             )
         })

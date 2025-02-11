@@ -222,23 +222,19 @@ pub fn sync_song(
     target_library: &Path,
     v_level: u64,
     art_strategy: ArtStrategy,
+    force: bool,
 ) -> Result<UpdateType, MusicLibraryError> {
     // Early exit if it doesn't need to be updated.
-    let shadow = song.get_shadow_filename(source_library, target_library);
-    if !has_music_file_changed(&song.path, &shadow) {
+    // Can't change files in place with ffmpeg, so if we need to update then we need to
+    // overwrite the file anyway.
+    let how_updated = song.status(source_library, target_library);
+    if how_updated == UpdateType::Unchanged && !force {
         return Ok(UpdateType::Unchanged);
     }
 
-    // Can't change files in place with ffmpeg, so if we need to update then we need to
-    // overwrite the file anyway.
-    let how_updated = if shadow.exists() {
-        UpdateType::Overwritten
-    } else {
-        UpdateType::New
-    };
-
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
+    let shadow = song.get_shadow_filename(source_library, target_library);
     let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
@@ -329,7 +325,14 @@ mod tests {
         // Delete anything that's already there, because we wanna test it if it's a new file.
         let target = song.get_shadow_filename(&source_library, &target_library);
         let _ = std::fs::remove_file(&target);
-        let updated = sync_song(&song, &source_library, &target_library, 3, art_strategy)?;
+        let updated = sync_song(
+            &song,
+            &source_library,
+            &target_library,
+            3,
+            art_strategy,
+            false,
+        )?;
 
         assert!(updated == UpdateType::New);
         match art_strategy {

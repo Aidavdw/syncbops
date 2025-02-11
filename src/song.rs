@@ -1,4 +1,7 @@
-use crate::ffmpeg_interface::{does_file_have_embedded_artwork, FfmpegError};
+use crate::{
+    ffmpeg_interface::{does_file_have_embedded_artwork, FfmpegError},
+    music_library::{has_music_file_changed, UpdateType},
+};
 use std::path::{Path, PathBuf};
 
 pub struct Song {
@@ -28,5 +31,16 @@ impl Song {
             return Ok(true);
         }
         does_file_have_embedded_artwork(&self.path)
+    }
+    /// How has the file changed since the last sync?
+    pub fn status(&self, source_library: &Path, target_library: &Path) -> UpdateType {
+        let shadow = self.get_shadow_filename(source_library, target_library);
+        if !has_music_file_changed(&self.path, &shadow) {
+            UpdateType::Unchanged
+        } else if shadow.exists() {
+            UpdateType::Overwritten
+        } else {
+            UpdateType::New
+        }
     }
 }
