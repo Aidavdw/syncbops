@@ -18,10 +18,10 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
                 .join(" "),
         })?;
     let txt = String::from_utf8(ffprobe.stderr).unwrap();
-    // TODO: Instead, check if it has a video stream: If the title is different (the default for
-    // ffmpeg is "other") then it won't recognise it.
     //TODO: Increase test coverage, to see if this works with .m4a, FLAC, etc.
-    Ok(txt.contains("Cover"))
+    // In ffmpeg, embedded artworks are considered as extra "streams". They are, confusingly
+    // enough, of type video. Generally they are also tagged with a meta tag, such as "cover"
+    Ok(txt.contains("Video"))
 }
 
 /// Takes a path of a song file, transcodes it using ffmpeg, and saves it to the target path. Returns the path of the output file. Like `ffmpeg -i [input file] -codec:a libmp3lame -q:a [V-level] [output file].mp3`
