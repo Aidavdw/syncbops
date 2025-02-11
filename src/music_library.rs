@@ -205,15 +205,15 @@ pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegE
 }
 
 /// How to handle album art
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum ArtStrategy {
     /// Remove all embedded album art, and don't copy album art files.
     None,
-    /// Embeds album art in all files. Might take up more space!
+    /// Embeds album art in all files. Carries over album art that was already in source files, and embeds external album art. Might take up more space!
     EmbedAll,
-    /// If there is a cover.jpg etc, use that. Otherwise, use embedded art.
+    /// If there is both embedded and external, prefer external. E.g. If there is a cover.jpg (or similar), use that. If there is no dedicated file, use embedded art.
     PreferFile,
-    /// Discard all embedded art, only keep cover.jpg
+    /// Do not embed any cover art: Discard all existing embedded art, only keep cover.jpg if it exists.
     FileOnly,
 }
 
@@ -222,7 +222,7 @@ pub fn sync_song(
     song: &Song,
     source_library: &Path,
     target_library: &Path,
-    v_level: u32,
+    v_level: u64,
     art_strategy: ArtStrategy,
 ) -> Result<UpdateType, MusicLibraryError> {
     // Early exit if it doesn't need to be updated.

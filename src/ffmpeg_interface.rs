@@ -29,8 +29,8 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
 pub fn transcode_song(
     source: &Path,
     target: &Path,
-    v_level: u32,
-    include_album_art: bool,
+    v_level: u64,
+    embed_art: bool,
     external_art_to_embed: Option<&Path>,
 ) -> Result<(), FfmpegError> {
     debug_assert!(
@@ -44,7 +44,7 @@ pub fn transcode_song(
         .arg("-i")
         .arg(source);
 
-    if include_album_art {
+    if embed_art {
         if let Some(path) = external_art_to_embed {
             binding.arg("-i").arg(path);
         }
@@ -57,7 +57,7 @@ pub fn transcode_song(
         .arg(v_level.to_string());
 
     // TODO: embed artwork if missing
-    if external_art_to_embed.is_some() && include_album_art {
+    if external_art_to_embed.is_some() && embed_art {
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
         binding
             .arg("-metadata:s:v")
@@ -68,7 +68,7 @@ pub fn transcode_song(
             .arg("0:a")
             .arg("-map")
             .arg("1:v");
-    } else if !include_album_art {
+    } else if !embed_art {
         binding.arg("-vn");
     }
 

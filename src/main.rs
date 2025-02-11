@@ -1,12 +1,12 @@
 mod ffmpeg_interface;
 mod music_library;
 mod song;
-use clap::{arg, value_parser};
+use clap::{arg, builder::EnumValueParser, value_parser, Parser, ValueEnum};
 use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_albums_in_directory, songs_without_album_art,
-    sync_song, MusicLibraryError, UpdateType,
+    sync_song, ArtStrategy, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -15,31 +15,41 @@ use std::path::PathBuf;
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<UpdateType, MusicLibraryError>)>;
 
-fn main() -> miette::Result<()> {
-    // Long arguments with dashes need to be in "", per https://github.com/clap-rs/clap/issues/3586
-    let cmd = clap::Command::new("musicsync")
-        .bin_name("music_portable_sync")
-        .about("Make a smaller version of your music library, and keep it in sync with your main library. Useful for keeping on a phone!")
-        .version(clap::crate_version!())
-        .arg_required_else_help(true)
-        .args([
-            arg!(<INPUT> "Input directory for walking").required(true).value_parser(value_parser!(PathBuf)),
-            arg!(<OUTPUT> "Output directory").required(true).value_parser(value_parser!(PathBuf)),
-            // LAME uses V1 etc, ffmpeg actually uses -q:a 1. https://trac.ffmpeg.org/wiki/Encode/MP3 
-            arg!(-c --compressionlevel <MP3_COMPRESSION_LEVEL> "Target average bitrate preset for MP3 VBR compression. Only supply the number, e.g '0'. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. Defaults to V3 = 175kbit/s"),
-            arg!(-f --force "Force overwrite existing files"),
-            arg!(--preserve "Preserve target folder files, even if they don't exist in source dir"),
-            arg!(--"dont-copy-cover-image-files" "Don't copy cover images found in the music library."),
-            arg!(--"embed-art" <EMBED_ART> "How to handle embedded art. 'none' removes all embedded art. 'retain' keeps embedded art, but does not embed new art. 'retain_if_no_album_art' keeps only embedded art for albums where no cover art file is found. 'embed' forces embedding for every track (this might take up extra space). Defaults to 'retain_if_no_album_art.'"),
-            arg!(--"embed-art-resolution" "Maximum resolution for embedded art. Files lower in resolution will not be touched. Default (not set) will embed everything at their actual resolution."),
-            arg!(--"cover-image-file-names" <COVER> "Cover image suffix (case-insensitive). Default to Cover.jpg,Cover.png,AlbumArtSmall.jpg,AlbumArtwork.png")
-        ]);
-    let matches = cmd.get_matches();
+#[derive(clap::Parser)]
+#[command(version, about, long_about = None)] // Read from cargo.toml
+struct Cli {
+    /// The directory to be scanned for music files to synchronise
+    source_library: PathBuf,
 
-    let source_library: PathBuf = matches
-        .get_one::<PathBuf>("INPUT")
-        .expect("no library dir given")
-        .to_path_buf();
+    /// The directory that a transcoded copy of the library provided will be put into.
+    target_library: PathBuf,
+
+    /// Target average bitrate preset for MP3 VBR compression. Is the LAME V#, or the ffmpeg -q:a # argument. Only supply the number, e.g '0', between 0 and 9. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. See https://trac.ffmpeg.org/wiki/Encode/MP3 for more.
+    #[arg(short, long, value_name = "LEVEL", default_value_t = 3)]
+    compression_level: u64,
+
+    /// TODO: Force overwriting existing files
+    #[arg(short, long, default_value_t = false)]
+    force: bool,
+
+    /// How to handle album art
+    #[arg(short, long, value_name = "STRATEGY", default_value = "prefer-file")]
+    art_strategy: ArtStrategy,
+
+    /// TODO: Implement? not sure if still needed??  Preserve target folder files, even if they don't exist in source dir
+    #[arg(short, long, default_value_t = false)]
+    preserve: bool,
+
+    /// Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
+    #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
+    embed_art_resolution: u64,
+    // TODO: Add dry-run option.
+}
+
+fn main() -> miette::Result<()> {
+    let cli = Cli::parse();
+    let source_library = cli.source_library;
+    let target_library = cli.target_library;
 
     println!("Discovering files in {}", source_library.display());
     let albums = find_albums_in_directory(&source_library)?;
@@ -54,7 +64,7 @@ fn main() -> miette::Result<()> {
     // Report if there are songs without album art.
     let songs_without_album_art = songs_without_album_art(&albums)?;
     if !songs_without_album_art.is_empty() {
-        println!("Warning! There are songs without any album art (embedded or found in Cover.jpg, folder.png, etc:");
+        println!("Warning! There are songs without any album art (either embedded or found in Cover.jpg, folder.png, etc:");
         for x in songs_without_album_art {
             println!("\t- {}", x.display())
         }
@@ -70,10 +80,6 @@ fn main() -> miette::Result<()> {
     }
     let songs = songs; // unmut
 
-    let target_library: PathBuf = matches
-        .get_one::<PathBuf>("OUTPUT")
-        .expect("no output library dir given")
-        .to_path_buf();
     // If the target dir coes not exist, warn the user that it does not exist. Don't just
     // willy-nilly create it, because they could've made a typo.
     if !target_library.is_dir() {
@@ -83,8 +89,8 @@ fn main() -> miette::Result<()> {
         .into());
     }
 
-    let v_level = 3;
-    let art_strategy = music_library::ArtStrategy::PreferFile;
+    let v_level = cli.compression_level;
+    let art_strategy = cli.art_strategy;
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
