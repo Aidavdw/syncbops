@@ -42,6 +42,10 @@ struct Cli {
     /// Don't actually make any changes to the filesystem, just report on what it would look like after the operation. Makes most sense to run together with verbose option.
     #[arg(short, long, default_value_t = false)]
     dry_run: bool,
+
+    /// Display more info.
+    #[arg(short, long, default_value_t = false)]
+    verbose: bool,
 }
 
 fn main() -> miette::Result<()> {
@@ -132,7 +136,7 @@ fn main() -> miette::Result<()> {
         .filter_map(|o| o.to_owned())
         .collect::<Vec<_>>();
 
-    print!("{}", summarize(sync_results, new_cover_arts));
+    print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
 
     // TODO: Log the final change codes + errors to a file too.
     // write_log(sync_results);
@@ -146,38 +150,58 @@ fn main() -> miette::Result<()> {
     // delete it. can re-use find_albums_in_directory()
 }
 
-fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>) -> String {
+fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: bool) -> String {
     // Might be sorted differently because of parallel execution, so put in order again.
     let mut unsorted = sync_results;
     unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
     let sync_results = unsorted;
+
+    let mut summary = String::with_capacity(4000);
     let mut n_unchanged = 0;
     let mut n_new = 0;
     let mut n_overwritten = 0;
     let mut n_err = 0;
-    let mut error_log = String::new();
+    let mut error_messages = String::with_capacity(4000);
+    let mut song_updates = String::new();
     for (song, r) in sync_results {
         match r {
-            Ok(update_type) => match update_type {
-                UpdateType::Unchanged => n_unchanged += 1,
-                UpdateType::New => n_new += 1,
-                UpdateType::Overwritten => n_overwritten += 1,
-            },
+            Ok(update_type) => {
+                match update_type {
+                    UpdateType::Unchanged => n_unchanged += 1,
+                    UpdateType::New => n_new += 1,
+                    UpdateType::Overwritten => n_overwritten += 1,
+                };
+                song_updates.push_str(&format!("{} →  [{:?}]", song.path.display(), update_type))
+            }
             Err(e) => {
                 n_err += 1;
-                error_log.push_str(&format!(
-                    "Error with {}\n{:?}\n",
+                let err_msg = &format!(
+                    "{} →  [Error]\n{:?}\n",
                     song.path.display(),
                     miette::Report::new(e)
-                ))
+                );
+                error_messages.push_str(&err_msg)
             }
         }
     }
+    summary.push_str("====== Summary of synchronisation ======\n");
+    summary.push_str(&format!("Unchanged: {}\n", n_unchanged));
+    summary.push_str(&format!("New songs: {}\n", n_new));
+    summary.push_str(&format!("Changed songs (overwritten): {}\n", n_overwritten));
+    summary.push_str(&format!("New album art: {}\n", new_cover_arts.len()));
     if n_err == 0 {
-        format!("====== Summary of synchronisation ======\nNew songs: {}\nChanged songs (overwritten): {}\nUnchanged songs: {}\nNew album art: {}\nNo Errors :D\n", n_new, n_overwritten, n_unchanged, new_cover_arts.len())
+        summary.push_str("No Errors :D\n");
     } else {
-        format!("====== Summary of synchronisation ======\nNew files: {}\nChanged files (overwritten): {}\nUnchanged files: {}\nNew album art: {}\nFiles with errors: {}\nThe following errors occurred:\n {}", n_new, n_overwritten, n_unchanged, new_cover_arts.len(), n_err, error_log)
+        summary.push_str(&format!("Files with errors: {}\n", n_err));
+        summary.push_str("The following errors occurred:\n");
+        summary.push_str(&error_messages);
     }
+    if verbose {
+        summary.push_str("Change log\n");
+        summary.push_str(&song_updates)
+    }
+
+    summary
 
     // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"
 }

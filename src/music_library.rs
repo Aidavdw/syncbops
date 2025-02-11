@@ -228,9 +228,12 @@ pub fn sync_song(
     // Early exit if it doesn't need to be updated.
     // Can't change files in place with ffmpeg, so if we need to update then we need to
     // overwrite the file anyway.
-    let how_updated = song.status(source_library, target_library);
+    let mut how_updated = song.status(source_library, target_library);
     if how_updated == UpdateType::Unchanged && !force {
         return Ok(UpdateType::Unchanged);
+    }
+    if how_updated == UpdateType::Unchanged && force {
+        how_updated = UpdateType::Overwritten
     }
 
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
