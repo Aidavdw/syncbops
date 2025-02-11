@@ -1,9 +1,8 @@
 mod ffmpeg_interface;
 mod music_library;
 mod song;
-use clap::{arg, builder::EnumValueParser, value_parser, Parser, ValueEnum};
+use clap::{arg, Parser};
 use indicatif::ParallelProgressIterator;
-use itertools::Itertools;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_albums_in_directory, songs_without_album_art,
     sync_song, ArtStrategy, MusicLibraryError, UpdateType,
@@ -94,6 +93,7 @@ fn main() -> miette::Result<()> {
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
+    println!("Synchronising music files...");
     let sync_results: SyncResults = songs
         .par_iter()
         .progress()
@@ -113,13 +113,13 @@ fn main() -> miette::Result<()> {
 
     // Go over all the dedicated album art.
     // If there is a dedicated art file for the music file, add it. If it already exists, it is probably already added by another file
+    println!("Checking copying external cover art...");
     let new_cover_arts = songs
         .iter()
         .map(|song| copy_dedicated_cover_art_for_song(song, &source_library, &target_library))
         .collect::<Result<Vec<_>, _>>()?
         .iter()
-        .filter(|o| o.is_some())
-        .map(|o| o.to_owned().unwrap())
+        .filter_map(|o| o.to_owned())
         .collect::<Vec<_>>();
 
     print!("{}", summarize(sync_results, new_cover_arts));

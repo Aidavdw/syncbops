@@ -39,7 +39,6 @@ pub enum ImageType {
 pub enum FileType {
     Music(MusicFileType),
     Art(ImageType),
-    Lyrics,
 }
 
 fn identify_file_type(path: &Path) -> Option<FileType> {
@@ -135,7 +134,6 @@ pub fn find_albums_in_directory(path: &PathBuf) -> Result<Vec<Album>, MusicLibra
                         album_art = Some(sub_path)
                     }
                 }
-                FileType::Lyrics => todo!(),
             }
         }
     }
@@ -241,11 +239,7 @@ pub fn sync_song(
 
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
-    let a = fs::create_dir_all(
-        shadow
-            .parent()
-            .expect("Cannot create picture in target library"),
-    );
+    let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
     let embed_art = match art_strategy {
@@ -279,7 +273,7 @@ pub fn copy_dedicated_cover_art_for_song(
     let shadow = target_library.join(relative_path);
     // TODO: Return error on something that is not a "file already exists"
     if !fs::exists(&shadow).unwrap() {
-        let a = std::fs::copy(path, &shadow);
+        let _ = std::fs::copy(path, &shadow);
         Ok(Some(shadow))
     } else {
         Ok(None)

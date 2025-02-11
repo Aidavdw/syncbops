@@ -1,9 +1,5 @@
+use crate::ffmpeg_interface::{does_file_have_embedded_artwork, FfmpegError};
 use std::path::{Path, PathBuf};
-
-use crate::{
-    ffmpeg_interface::{does_file_have_embedded_artwork, transcode_song, FfmpegError},
-    music_library::{has_music_file_changed, MusicLibraryError, UpdateType},
-};
 
 pub struct Song {
     /// Where the original song file can be found
