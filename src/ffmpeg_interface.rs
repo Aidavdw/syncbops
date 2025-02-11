@@ -56,7 +56,6 @@ pub fn transcode_song(
         .arg("-q:a")
         .arg(v_level.to_string());
 
-    // TODO: embed artwork if missing
     if external_art_to_embed.is_some() && embed_art {
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
         binding
@@ -160,7 +159,6 @@ mod tests {
             "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_never_had_embedded_album_art.mp3".into();
         transcode_song(&file_without_embedded_artwork, &target, 3, true, None)?;
-        // TODO: Throw an error if you include_album_art, but the final file is not able to embed
         // album art.
         assert!(!does_file_have_embedded_artwork(&target)?);
 

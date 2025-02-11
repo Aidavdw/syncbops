@@ -139,9 +139,6 @@ fn main() -> miette::Result<()> {
 
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
 
-    // TODO: Log the final change codes + errors to a file too.
-    // write_log(sync_results);
-
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
