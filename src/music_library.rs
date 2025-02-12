@@ -111,7 +111,14 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
 /// cover.jpg or something?
 fn is_image_file_album_art(path: &Path) -> bool {
     // if it's something like "cover" or "folder"
-    const ALLOWED_STEMS: [&str; 5] = ["cover", "folder", "album", "cover_image", "cover_art"];
+    const ALLOWED_STEMS: [&str; 6] = [
+        "cover",
+        "folder",
+        "album",
+        "cover_image",
+        "cover_art",
+        "front",
+    ];
     let stem_is_allowed: bool = ALLOWED_STEMS.iter().any(|x| {
         path.file_stem()
             .is_some_and(|s| s.to_ascii_lowercase() == *x)
@@ -205,7 +212,7 @@ pub fn find_albums_in_directory(
             music_files,
             album_art,
         });
-    } else if albums.is_empty() {
+    } else if albums.is_empty() && verbose {
         println!(
             "No music files found in {} (and its subfolders)",
             path.display()
@@ -245,13 +252,13 @@ pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegE
     // not, check if there is embedde art for each file (costlier)
     let songs = albums
         .iter()
-        .progress()
         .filter(|album| album.album_art.is_none())
         .flat_map(|album| album.music_files.clone())
         .collect::<Vec<_>>();
     // Separately run the querying function, because it can error. if it errors, exit the entire
     // function.
     // TODO: Return the paths where it resulted in an error too
+    // TODO: Show progress par here too
     let results = songs
         .par_iter()
         .map(|music_file| does_file_have_embedded_artwork(music_file))
@@ -304,7 +311,9 @@ pub fn sync_song(
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
     let shadow = song.get_shadow_filename(source_library, target_library, &target_filetype);
-    let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
+    if !dry_run {
+        let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
+    }
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
     let embed_art = match art_strategy {
