@@ -26,10 +26,6 @@ struct Cli {
     /// The directory that a transcoded copy of the library provided will be put into.
     target_library: PathBuf,
 
-    /// Target average bitrate preset for MP3 VBR compression. Is the LAME V#, or the ffmpeg -q:a # argument. Only supply the number, e.g '0', between 0 and 9. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. See https://trac.ffmpeg.org/wiki/Encode/MP3 for more.
-    #[arg(short, long, value_name = "LEVEL", default_value_t = 3)]
-    compression_level: u64,
-
     /// Force overwriting existing music files. Does not affect external album art files.
     #[arg(short, long, default_value_t = false)]
     force: bool,
@@ -55,6 +51,12 @@ fn main() -> miette::Result<()> {
     let cli = Cli::parse();
     let source_library = cli.source_library;
     let target_library = cli.target_library;
+
+    // TODO: Validate if e.g. FLAC level is between 0 and 12, otherwise return error.
+    match cli.target_filetype {
+        MusicFileType::Mp3 { .. } => (),
+        _ => return Err(MusicLibraryError::OutputCodecNotYetImplemented.into()),
+    }
 
     if cli.dry_run {
         println!("Performing a dry run, so no actual changes will be made to the filesystem.")
@@ -99,7 +101,6 @@ fn main() -> miette::Result<()> {
         .into());
     }
 
-    let v_level = cli.compression_level;
     let art_strategy = cli.art_strategy;
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
@@ -118,7 +119,7 @@ fn main() -> miette::Result<()> {
                     song,
                     &source_library,
                     &target_library,
-                    v_level,
+                    cli.target_filetype.clone(),
                     art_strategy,
                     cli.force,
                     cli.dry_run,

@@ -266,7 +266,7 @@ pub fn sync_song(
     song: &Song,
     source_library: &Path,
     target_library: &Path,
-    v_level: u64,
+    target_filetype: MusicFileType,
     art_strategy: ArtStrategy,
     force: bool,
     dry_run: bool,
@@ -298,7 +298,7 @@ pub fn sync_song(
         transcode_song(
             &song.path,
             &shadow,
-            v_level,
+            target_filetype,
             embed_art,
             song.external_album_art.as_deref(),
         )?
@@ -341,6 +341,9 @@ pub enum MusicLibraryError {
 
     #[error("The given target directory '{target_library}' does not (yet) exist. Please make sure the folder exists, even if it is just an empty folder!")]
     TargetLibraryDoesNotExist { target_library: PathBuf },
+
+    #[error("This output filetype/encoding is not yet supported :(. Feel free to implement it and send a PR <3")]
+    OutputCodecNotYetImplemented,
 }
 
 #[cfg(test)]
@@ -348,7 +351,7 @@ mod tests {
     use super::{songs_without_album_art, Album};
     use crate::{
         ffmpeg_interface::does_file_have_embedded_artwork,
-        music_library::{ArtStrategy, UpdateType},
+        music_library::{ArtStrategy, MusicFileType, UpdateType},
         song::Song,
     };
     use core::time;
@@ -384,7 +387,11 @@ mod tests {
             &song,
             &source_library,
             &target_library,
-            3,
+            MusicFileType::Mp3 {
+                constant_bitrate: 0,
+                vbr: true,
+                quality: 3,
+            },
             art_strategy,
             false,
             false,

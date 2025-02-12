@@ -4,6 +4,8 @@ use std::{
     process::Command,
 };
 
+use crate::music_library::MusicFileType;
+
 /// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
     let mut binding = Command::new("ffprobe");
@@ -28,15 +30,10 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
 pub fn transcode_song(
     source: &Path,
     target: &Path,
-    v_level: u64,
+    target_type: MusicFileType,
     embed_art: bool,
     external_art_to_embed: Option<&Path>,
 ) -> Result<(), FfmpegError> {
-    debug_assert!(
-        v_level < 9,
-        "Presets for v-level compression only go up to 9. Be sure to sanitise input."
-    );
-
     let mut binding = Command::new("ffmpeg");
     binding
         .arg("-y") // Replace if it already exists
@@ -49,11 +46,26 @@ pub fn transcode_song(
         }
     }
 
-    binding
-        .arg("-codec:a")
-        .arg("libmp3lame")
-        .arg("-q:a")
-        .arg(v_level.to_string());
+    // Mp3:
+    // `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
+
+    binding.arg("-codec:a");
+
+    match target_type {
+        MusicFileType::Mp3 {
+            constant_bitrate,
+            vbr,
+            quality,
+        } => {
+            binding.arg("libmp3lame");
+            if vbr {
+                binding.arg("-q:a").arg(quality.to_string());
+            } else {
+                binding.arg("-b:a").arg(format!("{}k", constant_bitrate));
+            }
+        }
+        _ => panic!("MusicFileType not yet implemented as a target."),
+    }
 
     if external_art_to_embed.is_some() && embed_art {
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
@@ -121,6 +133,8 @@ pub enum FfmpegError {
 
 #[cfg(test)]
 mod tests {
+    use crate::music_library::MusicFileType;
+
     use super::{does_file_have_embedded_artwork, transcode_song};
     use std::path::PathBuf;
 
@@ -145,7 +159,17 @@ mod tests {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_keep_embedded_album_art.mp3".into();
-        transcode_song(&file_with_embedded_artwork, &target, 3, true, None)?;
+        transcode_song(
+            &file_with_embedded_artwork,
+            &target,
+            MusicFileType::Mp3 {
+                constant_bitrate: 0,
+                vbr: true,
+                quality: 3,
+            },
+            true,
+            None,
+        )?;
         assert!(does_file_have_embedded_artwork(&target)?);
 
         Ok(())
@@ -156,7 +180,17 @@ mod tests {
         let file_without_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_never_had_embedded_album_art.mp3".into();
-        transcode_song(&file_without_embedded_artwork, &target, 3, true, None)?;
+        transcode_song(
+            &file_without_embedded_artwork,
+            &target,
+            MusicFileType::Mp3 {
+                constant_bitrate: 0,
+                vbr: true,
+                quality: 3,
+            },
+            true,
+            None,
+        )?;
         // album art.
         assert!(!does_file_have_embedded_artwork(&target)?);
 
@@ -168,7 +202,17 @@ mod tests {
         let file_with_embedded_artwork: PathBuf =
             "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
         let target: PathBuf = "/tmp/test_transcode_drop_embedded_album_art.mp3".into();
-        transcode_song(&file_with_embedded_artwork, &target, 3, false, None)?;
+        transcode_song(
+            &file_with_embedded_artwork,
+            &target,
+            MusicFileType::Mp3 {
+                constant_bitrate: 0,
+                vbr: true,
+                quality: 3,
+            },
+            false,
+            None,
+        )?;
         assert!(!does_file_have_embedded_artwork(&target)?);
 
         Ok(())
@@ -184,7 +228,11 @@ mod tests {
         transcode_song(
             &file_without_embedded_artwork,
             &target,
-            3,
+            MusicFileType::Mp3 {
+                constant_bitrate: 0,
+                vbr: true,
+                quality: 3,
+            },
             true,
             Some(&external_artwork_file),
         )?;
