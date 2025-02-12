@@ -133,111 +133,104 @@ pub enum FfmpegError {
 
 #[cfg(test)]
 mod tests {
+    use super::{does_file_have_embedded_artwork, transcode_song};
     use crate::music_library::MusicFileType;
 
-    use super::{does_file_have_embedded_artwork, transcode_song};
-    use std::path::PathBuf;
-
-    #[test]
-    fn embedded_artwork() -> miette::Result<()> {
-        let file_with_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
-        assert!(does_file_have_embedded_artwork(
-            &file_with_embedded_artwork
-        )?);
-
-        let file_without_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
-        assert!(!does_file_have_embedded_artwork(
-            &file_without_embedded_artwork
-        )?);
-        Ok(())
+    use std::path::{Path, PathBuf};
+    fn with_embedded_album_art() -> PathBuf {
+        "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into()
     }
 
-    #[test]
-    fn transcode_embedded_album_art() -> miette::Result<()> {
-        let file_with_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
-        let target: PathBuf = "/tmp/test_transcode_keep_embedded_album_art.mp3".into();
+    fn without_art() -> PathBuf {
+        "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3".into()
+    }
+
+    fn external_art() -> Option<PathBuf> {
+        Some("/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into())
+    }
+
+    fn transcode_file_test(
+        identifier: &str,
+        source: PathBuf,
+        embed_art: bool,
+        external_art_to_embed: Option<PathBuf>,
+    ) -> miette::Result<()> {
+        use super::transcode_song;
+        let target: PathBuf = format!("/tmp/transcode_test_{}/song.mp3", identifier).into();
+        let _ = std::fs::create_dir_all(target.parent().unwrap());
+        let _ = std::fs::remove_file(&target);
+
         transcode_song(
-            &file_with_embedded_artwork,
+            &source,
             &target,
             MusicFileType::Mp3 {
                 constant_bitrate: 0,
                 vbr: true,
                 quality: 3,
             },
+            embed_art,
+            external_art_to_embed.as_deref(),
+        )?;
+        assert!(std::fs::exists(&target).unwrap());
+        if does_file_have_embedded_artwork(&source)? || external_art_to_embed.is_some() {
+            assert_eq!(does_file_have_embedded_artwork(&target)?, embed_art);
+        }
+        Ok(())
+    }
+
+    #[test]
+    /// Attempt to get embedded art, even though no art is supplied
+    fn mp3_no_art_embed() -> miette::Result<()> {
+        transcode_file_test("mp3_no_art_embed", without_art(), true, None)
+    }
+
+    #[test]
+    /// Keep embedded art
+    fn mp3_keep_embedded_art() -> miette::Result<()> {
+        transcode_file_test(
+            "mp3_embedded_art_embed",
+            with_embedded_album_art(),
             true,
             None,
-        )?;
-        assert!(does_file_have_embedded_artwork(&target)?);
-
-        Ok(())
+        )
     }
 
     #[test]
-    fn transcode_no_embedded_album_art() -> miette::Result<()> {
-        let file_without_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
-        let target: PathBuf = "/tmp/test_transcode_never_had_embedded_album_art.mp3".into();
-        transcode_song(
-            &file_without_embedded_artwork,
-            &target,
-            MusicFileType::Mp3 {
-                constant_bitrate: 0,
-                vbr: true,
-                quality: 3,
-            },
-            true,
-            None,
-        )?;
-        // album art.
-        assert!(!does_file_have_embedded_artwork(&target)?);
-
-        Ok(())
-    }
-
-    #[test]
-    fn transcode_drop_album_art() -> miette::Result<()> {
-        let file_with_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
-        let target: PathBuf = "/tmp/test_transcode_drop_embedded_album_art.mp3".into();
-        transcode_song(
-            &file_with_embedded_artwork,
-            &target,
-            MusicFileType::Mp3 {
-                constant_bitrate: 0,
-                vbr: true,
-                quality: 3,
-            },
+    /// drop embedded album art
+    fn mp3_embedded_art_drop() -> miette::Result<()> {
+        transcode_file_test(
+            "mp3_embedded_art_drop",
+            with_embedded_album_art(),
             false,
             None,
-        )?;
-        assert!(!does_file_have_embedded_artwork(&target)?);
-
-        Ok(())
+        )
     }
 
     #[test]
-    fn transcode_embed_external_album_art() -> miette::Result<()> {
-        let file_without_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
-        let external_artwork_file: PathBuf =
-            "/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into();
-        let target: PathBuf = "/tmp/test_transcode_newly_embedded_album_art.mp3".into();
-        transcode_song(
-            &file_without_embedded_artwork,
-            &target,
-            MusicFileType::Mp3 {
-                constant_bitrate: 0,
-                vbr: true,
-                quality: 3,
-            },
-            true,
-            Some(&external_artwork_file),
-        )?;
-        assert!(does_file_have_embedded_artwork(&target)?);
+    /// drop external art
+    fn mp3_external_art_drop() -> miette::Result<()> {
+        transcode_file_test(
+            "mp3_external_art_drop",
+            without_art(),
+            false,
+            external_art(),
+        )
+    }
 
-        Ok(())
+    #[test]
+    /// embed external art
+    fn mp3_external_art_embed() -> miette::Result<()> {
+        transcode_file_test("mp3_external_art_drop", without_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn mp3_both_embed() -> miette::Result<()> {
+        transcode_file_test(
+            "mp3_external_art_drop",
+            with_embedded_album_art(),
+            true,
+            external_art(),
+        )
     }
 }
