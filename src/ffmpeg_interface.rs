@@ -133,20 +133,110 @@ pub enum FfmpegError {
 
 #[cfg(test)]
 mod tests {
-    use super::{does_file_have_embedded_artwork, transcode_song};
+    use super::does_file_have_embedded_artwork;
     use crate::music_library::MusicFileType;
+    use std::path::PathBuf;
 
-    use std::path::{Path, PathBuf};
-    fn with_embedded_album_art() -> PathBuf {
-        "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into()
+    fn mp3_with_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/with_art.mp3");
+        d
     }
 
-    fn without_art() -> PathBuf {
-        "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3".into()
+    fn mp3_without_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/no_art.mp3");
+        d
+    }
+
+    fn flac_with_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/with_art.flac");
+        d
+    }
+
+    fn flac_without_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/no_art.flac");
+        d
+    }
+
+    fn m4a_with_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/with_art.m4a");
+        d
+    }
+
+    fn m4a_without_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/no_art.m4a");
+        d
+    }
+
+    fn ogg_with_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/with_art.ogg");
+        d
+    }
+
+    fn ogg_without_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/no_art.ogg");
+        d
     }
 
     fn external_art() -> Option<PathBuf> {
-        Some("/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into())
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/cover_art.jpg");
+        Some(d)
+    }
+
+    #[test]
+    fn does_file_have_cover_art_mp3_yes() -> miette::Result<()> {
+        assert!(does_file_have_embedded_artwork(&mp3_with_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_mp3_no() -> miette::Result<()> {
+        assert!(!does_file_have_embedded_artwork(&mp3_without_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_flac_yes() -> miette::Result<()> {
+        assert!(does_file_have_embedded_artwork(&flac_with_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_flac_no() -> miette::Result<()> {
+        assert!(!does_file_have_embedded_artwork(&flac_without_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_ogg_yes() -> miette::Result<()> {
+        assert!(does_file_have_embedded_artwork(&ogg_with_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_ogg_no() -> miette::Result<()> {
+        assert!(!does_file_have_embedded_artwork(&ogg_without_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_m4a_yes() -> miette::Result<()> {
+        assert!(does_file_have_embedded_artwork(&m4a_with_art())?);
+        Ok(())
+    }
+
+    #[test]
+    fn does_file_have_cover_art_m4a_no() -> miette::Result<()> {
+        assert!(!does_file_have_embedded_artwork(&m4a_without_art())?);
+        Ok(())
     }
 
     fn transcode_file_test(
@@ -188,42 +278,42 @@ mod tests {
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn mp3_no_art_embed() -> miette::Result<()> {
-        transcode_file_test(without_art(), true, None)
+        transcode_file_test(mp3_without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn mp3_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(with_embedded_album_art(), true, None)
+        transcode_file_test(mp3_with_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn mp3_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(with_embedded_album_art(), false, None)
+        transcode_file_test(mp3_with_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn mp3_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(without_art(), false, external_art())
+        transcode_file_test(mp3_without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn mp3_external_art_embed() -> miette::Result<()> {
-        transcode_file_test(without_art(), true, external_art())
+        transcode_file_test(mp3_without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_embed() -> miette::Result<()> {
-        transcode_file_test(with_embedded_album_art(), true, external_art())
+        transcode_file_test(mp3_with_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_drop() -> miette::Result<()> {
-        transcode_file_test(with_embedded_album_art(), false, external_art())
+        transcode_file_test(mp3_with_art(), false, external_art())
     }
 }
