@@ -150,13 +150,20 @@ mod tests {
     }
 
     fn transcode_file_test(
-        identifier: &str,
         source: PathBuf,
         embed_art: bool,
         external_art_to_embed: Option<PathBuf>,
     ) -> miette::Result<()> {
         use super::transcode_song;
-        let target: PathBuf = format!("/tmp/transcode_test_{}/song.mp3", identifier).into();
+        // Technically there will be a VERY small chance the strings are identical.. lets just hope
+        // that doesn't happen.
+        let random_string = random_string::generate(16, "abcdefghijklmnopqrstuvwxyz");
+        let target: PathBuf = format!("/tmp/transcode_test_{}.mp3", random_string).into();
+        println!("Using {}", target.display());
+        assert!(
+            !std::fs::exists(&target).unwrap(),
+            "Astronomically small chance but randomly generated file already exists lol"
+        );
         let _ = std::fs::create_dir_all(target.parent().unwrap());
         let _ = std::fs::remove_file(&target);
 
@@ -181,56 +188,42 @@ mod tests {
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn mp3_no_art_embed() -> miette::Result<()> {
-        transcode_file_test("mp3_no_art_embed", without_art(), true, None)
+        transcode_file_test(without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn mp3_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(
-            "mp3_embedded_art_embed",
-            with_embedded_album_art(),
-            true,
-            None,
-        )
+        transcode_file_test(with_embedded_album_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn mp3_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(
-            "mp3_embedded_art_drop",
-            with_embedded_album_art(),
-            false,
-            None,
-        )
+        transcode_file_test(with_embedded_album_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn mp3_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(
-            "mp3_external_art_drop",
-            without_art(),
-            false,
-            external_art(),
-        )
+        transcode_file_test(without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn mp3_external_art_embed() -> miette::Result<()> {
-        transcode_file_test("mp3_external_art_drop", without_art(), true, external_art())
+        transcode_file_test(without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_embed() -> miette::Result<()> {
-        transcode_file_test(
-            "mp3_external_art_drop",
-            with_embedded_album_art(),
-            true,
-            external_art(),
-        )
+        transcode_file_test(with_embedded_album_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn mp3_both_drop() -> miette::Result<()> {
+        transcode_file_test(with_embedded_album_art(), false, external_art())
     }
 }
