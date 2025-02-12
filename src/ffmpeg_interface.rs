@@ -55,6 +55,7 @@ pub fn transcode_song(
             vbr,
             quality,
         } => {
+            // TODO: Write tags as ID3v2.3. Right now it is ID3v4, which is less broadly supported.
             binding.arg("libmp3lame");
             if vbr {
                 binding.arg("-q:a").arg(quality.to_string());

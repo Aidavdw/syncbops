@@ -4,6 +4,7 @@ use crate::ffmpeg_interface::FfmpegError;
 use crate::song::Song;
 use indicatif::ProgressIterator;
 use rayon::prelude::*;
+use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -66,28 +67,39 @@ pub enum MusicFileType {
     },
 }
 
+impl Display for MusicFileType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                MusicFileType::Mp3 { .. } => "mp3",
+                MusicFileType::Opus { .. } => "opus",
+                MusicFileType::Vorbis { .. } => "ogg",
+                MusicFileType::Flac { .. } => "flac",
+            }
+        )
+    }
+}
+
 pub enum ImageType {
     Png,
     Jpg,
 }
 
 pub enum FileType {
-    Music(MusicFileType),
-    Art(ImageType),
+    Music,
+    Art,
 }
 
 fn identify_file_type(path: &Path) -> Option<FileType> {
     let ext = path.extension()?.to_ascii_lowercase();
     Some(match ext.as_os_str().to_str()? {
-        "mp3" => FileType::Music(MusicFileType::Mp3 {
-            constant_bitrate: 0,
-            vbr: false,
-            quality: 0,
-        }),
-        "flac" => FileType::Music(MusicFileType::Flac { quality: 0 }),
-        "png" => FileType::Art(ImageType::Png),
-        "jpg" => FileType::Art(ImageType::Jpg),
-        "jpeg" => FileType::Art(ImageType::Jpg),
+        "mp3" => FileType::Music,
+        "flac" => FileType::Music,
+        "png" => FileType::Art,
+        "jpg" => FileType::Art,
+        "jpeg" => FileType::Art,
         _ => return None,
     })
 }
@@ -103,7 +115,7 @@ fn is_image_file_album_art(path: &Path) -> bool {
     });
 
     let has_right_extension =
-        identify_file_type(path).is_some_and(|file_type| matches!(file_type, FileType::Art(_)));
+        identify_file_type(path).is_some_and(|file_type| matches!(file_type, FileType::Art));
 
     stem_is_allowed && has_right_extension
 }
@@ -170,10 +182,10 @@ pub fn find_albums_in_directory(
                 continue;
             };
             match filetype {
-                FileType::Music(_) => {
+                FileType::Music => {
                     music_files.push(sub_path);
                 }
-                FileType::Art(_) => {
+                FileType::Art => {
                     if album_art.is_none() && is_image_file_album_art(&sub_path) {
                         album_art = Some(sub_path)
                     }
@@ -273,7 +285,7 @@ pub fn sync_song(
     // Early exit if it doesn't need to be updated.
     // Can't change files in place with ffmpeg, so if we need to update then we need to
     // overwrite the file anyway.
-    let mut how_updated = song.status(source_library, target_library);
+    let mut how_updated = song.status(source_library, target_library, &target_filetype);
     if how_updated == UpdateType::Unchanged && !force {
         return Ok(UpdateType::Unchanged);
     }
@@ -283,7 +295,7 @@ pub fn sync_song(
 
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
-    let shadow = song.get_shadow_filename(source_library, target_library);
+    let shadow = song.get_shadow_filename(source_library, target_library, &target_filetype);
     let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
 
     // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
@@ -400,17 +412,18 @@ mod tests {
         let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
-        let target = song.get_shadow_filename(&source_library, &target_library);
+        let target_filetype = MusicFileType::Mp3 {
+            constant_bitrate: 0,
+            vbr: true,
+            quality: 3,
+        };
+        let target = song.get_shadow_filename(&source_library, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
         let updated = sync_song(
             &song,
             &source_library,
             &target_library,
-            MusicFileType::Mp3 {
-                constant_bitrate: 0,
-                vbr: true,
-                quality: 3,
-            },
+            target_filetype,
             art_strategy,
             false,
             false,

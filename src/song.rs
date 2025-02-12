@@ -1,6 +1,6 @@
 use crate::{
     ffmpeg_interface::{does_file_have_embedded_artwork, FfmpegError},
-    music_library::{has_music_file_changed, UpdateType},
+    music_library::{has_music_file_changed, MusicFileType, UpdateType},
 };
 use std::path::{Path, PathBuf};
 
@@ -14,8 +14,16 @@ pub struct Song {
 
 impl Song {
     /// Where to put the synchronised copy
-    pub fn get_shadow_filename(&self, source_library: &Path, target_library: &Path) -> PathBuf {
-        target_library.join(self.library_relative_path(source_library))
+    pub fn get_shadow_filename(
+        &self,
+        source_library: &Path,
+        target_library: &Path,
+        filetype: &MusicFileType,
+    ) -> PathBuf {
+        target_library.join(
+            self.library_relative_path(source_library)
+                .with_extension(filetype.to_string()),
+        )
     }
 
     /// gets the path relative to the library.
@@ -33,8 +41,14 @@ impl Song {
         does_file_have_embedded_artwork(&self.path)
     }
     /// How has the file changed since the last sync?
-    pub fn status(&self, source_library: &Path, target_library: &Path) -> UpdateType {
-        let shadow = self.get_shadow_filename(source_library, target_library);
+    pub fn status(
+        &self,
+        source_library: &Path,
+        target_library: &Path,
+        filetype: &MusicFileType,
+    ) -> UpdateType {
+        // TODO:If it exists with a different filetype, give a warning
+        let shadow = self.get_shadow_filename(source_library, target_library, filetype);
         if !has_music_file_changed(&self.path, &shadow) {
             UpdateType::Unchanged
         } else if shadow.exists() {
