@@ -20,9 +20,7 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
                 .join(" "),
         })?;
     let txt = String::from_utf8(ffprobe.stderr).unwrap();
-    //TODO: Increase test coverage, to see if this works with .m4a, FLAC, etc.
-    // In ffmpeg, embedded artworks are considered as extra "streams". They are, confusingly
-    // enough, of type video. Generally they are also tagged with a meta tag, such as "cover"
+    // In ffmpeg, embedded artworks are considered as extra "streams". They are, confusingly enough, of type video. Generally they are also tagged with a meta tag, such as "cover"
     Ok(txt.contains("Video"))
 }
 

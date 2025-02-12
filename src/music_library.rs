@@ -31,14 +31,13 @@ pub struct Album {
 pub enum MusicFileType {
     /// Transcode to Mp3. Very widely supported, but not very good.
     Mp3 {
-        /// If not set to `vbr`, the constant bitrate in kbps.
+        /// If `vbr` flag not active, the constant bitrate in kbps.
         #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
         constant_bitrate: u64,
-        /// If this flag is set, encoding will be variable bitrate. the 'bitrate' arbument will be ignored, and the 'quality' argument used instead.
+        /// use variable bitrate encoding. the 'bitrate' arbument will be ignored, and the 'quality' argument used instead. Default true
         #[arg(short, long, default_value_t = true)]
         vbr: bool,
-        /// Is the LAME V#, or the ffmpeg -q:a # argument. From 0 to 9. Lower is higher quality, larger filesize.
-        /// Only supply the number, e.g '0', between 0 and 9. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. See https://trac.ffmpeg.org/wiki/Encode/MP3 for more.
+        /// If vbr flag is set, quality factor. From 0 to 9. See https://trac.ffmpeg.org/wiki/Encode/MP3
         #[arg(short, long, default_value_t = 3)]
         quality: usize,
     },
