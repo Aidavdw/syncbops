@@ -5,7 +5,7 @@ use clap::{arg, Parser};
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_albums_in_directory, songs_without_album_art,
-    sync_song, ArtStrategy, MusicLibraryError, UpdateType,
+    sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -17,6 +17,9 @@ type SyncResults<'a> = Vec<(&'a Song, Result<UpdateType, MusicLibraryError>)>;
 #[derive(clap::Parser)]
 #[command(version, about, long_about = None)] // Read from cargo.toml
 struct Cli {
+    #[command(subcommand)]
+    target_filetype: MusicFileType,
+
     /// The directory to be scanned for music files to synchronise
     source_library: PathBuf,
 
@@ -35,7 +38,7 @@ struct Cli {
     #[arg(short, long, value_name = "STRATEGY", default_value = "prefer-file")]
     art_strategy: ArtStrategy,
 
-    /// Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
+    /// TODO: Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
     #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
     embed_art_resolution: u64,
 

@@ -27,9 +27,44 @@ pub struct Album {
     pub album_art: Option<PathBuf>,
 }
 
+#[derive(Clone, Debug, clap::Subcommand)]
 pub enum MusicFileType {
-    Mp3,
-    Flac,
+    /// Transcode to Mp3. Very widely supported, but not very good.
+    Mp3 {
+        /// If not set to `vbr`, the constant bitrate in kbps.
+        #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
+        constant_bitrate: u64,
+        /// If this flag is set, encoding will be variable bitrate. the 'bitrate' arbument will be ignored, and the 'quality' argument used instead.
+        #[arg(short, long, default_value_t = true)]
+        vbr: bool,
+        /// Is the LAME V#, or the ffmpeg -q:a # argument. From 0 to 9. Lower is higher quality, larger filesize.
+        /// Only supply the number, e.g '0', between 0 and 9. V0 = 245, V1 = 225, V2 = 190, up to V9 = 65 kbit/s. See https://trac.ffmpeg.org/wiki/Encode/MP3 for more.
+        #[arg(short, long, default_value_t = 3)]
+        quality: usize,
+    },
+    /// Transcode to Opus. Nichely supported, but highest quality audio codec. This might not be supported by your ffmpeg build.
+    /// You need to explicitly configure the ffmpeg build with --enable-libopus.
+    Opus {
+        /// Target bitrate in
+        #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
+        bitrate: u64,
+        /// Compression algorithm complexity. 0-10. Trades quality for encoding time. higher is best quality. Does not affect filesize
+        #[arg(short, long, default_value_t = 3)]
+        compression_level: usize,
+    },
+    /// Transcode to Vorbis. Good support, high quality. Not always supported by ffmpeg
+    /// You need to explicitly configure the build with --enable-libvorbis.
+    Vorbis {
+        /// Trades quality for filesize. -1.0 - 10.0 (float!). Higher is better quality.
+        #[arg(short, long, default_value_t = 10.0)]
+        quality: f64,
+    },
+    /// Lossless. If a source file is already compressed, it will not be re-encoded.
+    Flac {
+        /// Compression factor. Trades compilation time for filesize. Higher is smaller file. From 0 to 12.
+        #[arg(short, long, default_value_t = 10)]
+        quality: u64,
+    },
 }
 
 pub enum ImageType {
@@ -45,8 +80,12 @@ pub enum FileType {
 fn identify_file_type(path: &Path) -> Option<FileType> {
     let ext = path.extension()?.to_ascii_lowercase();
     Some(match ext.as_os_str().to_str()? {
-        "mp3" => FileType::Music(MusicFileType::Mp3),
-        "flac" => FileType::Music(MusicFileType::Flac),
+        "mp3" => FileType::Music(MusicFileType::Mp3 {
+            constant_bitrate: 0,
+            vbr: false,
+            quality: 0,
+        }),
+        "flac" => FileType::Music(MusicFileType::Flac { quality: 0 }),
         "png" => FileType::Art(ImageType::Png),
         "jpg" => FileType::Art(ImageType::Jpg),
         "jpeg" => FileType::Art(ImageType::Jpg),
