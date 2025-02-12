@@ -358,6 +358,24 @@ mod tests {
     use itertools::Itertools;
     use std::{fs::File, path::PathBuf, thread::sleep};
 
+    fn with_embedded_album_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/with_art.mp3");
+        d
+    }
+
+    fn without_art() -> PathBuf {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/no_art.mp3");
+        d
+    }
+
+    fn external_art() -> Option<PathBuf> {
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/cover_art.jpg");
+        Some(d)
+    }
+
     #[test]
     fn has_music_file_changed_based_on_last_modified_time() {
         use super::has_music_file_changed as f;
@@ -377,7 +395,9 @@ mod tests {
     ) -> miette::Result<()> {
         use super::sync_song;
 
-        let source_library: PathBuf = "/home/aida/portable_music/".into();
+        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        d.push("test_data/");
+        let source_library: PathBuf = d;
         let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
@@ -432,18 +452,6 @@ mod tests {
 
         // The it should not be overwritten if
         Ok(())
-    }
-
-    fn with_embedded_album_art() -> PathBuf {
-        "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into()
-    }
-
-    fn without_art() -> PathBuf {
-        "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-03. Euphemia.mp3".into()
-    }
-
-    fn external_art() -> Option<PathBuf> {
-        Some("/home/aida/portable_music/Area 11/All The Lights In The Sky/folder.jpg".into())
     }
 
     // ART STRATEGY = NONE
@@ -669,11 +677,8 @@ mod tests {
 
     #[test]
     fn songs_without_album_art_test() -> miette::Result<()> {
-        let file_with_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Ado/狂言/04. FREEDOM.mp3".into();
-
-        let file_without_embedded_artwork: PathBuf =
-            "/home/aida/portable_music/Area 11/All The Lights In The Sky/1-02. Vectors.mp3".into();
+        let file_with_embedded_artwork: PathBuf = with_embedded_album_art();
+        let file_without_embedded_artwork: PathBuf = without_art();
 
         // One album only, only embedded
         assert_eq!(
