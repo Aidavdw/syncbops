@@ -94,8 +94,11 @@ pub enum FileType {
 
 fn identify_file_type(path: &Path) -> Option<FileType> {
     let ext = path.extension()?.to_ascii_lowercase();
+
     Some(match ext.as_os_str().to_str()? {
         "mp3" => FileType::Music,
+        "m4a" => FileType::Music,
+        "ogg" => FileType::Music,
         "flac" => FileType::Music,
         "png" => FileType::Art,
         "jpg" => FileType::Art,
@@ -186,6 +189,8 @@ pub fn find_albums_in_directory(
                     music_files.push(sub_path);
                 }
                 FileType::Art => {
+                    // TODO: If album art if there is no album art, check one folder up if there is
+                    // cover art there
                     if album_art.is_none() && is_image_file_album_art(&sub_path) {
                         album_art = Some(sub_path)
                     }
@@ -217,6 +222,9 @@ pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
         // If the target doesn't exist, it must be newer.
         return true;
     }
+
+    // TODO: Instead of checking last modified time, save a hash of the original file upon
+    // encoding. Then here, check if the hash of the original file is still the same.
     // Get the metadata for both files
     let source_last_modified = fs::metadata(source)
         .expect("Unable to read source file metadata.")
