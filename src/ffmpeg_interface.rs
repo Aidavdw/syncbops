@@ -316,4 +316,130 @@ mod tests {
     fn mp3_both_drop() -> miette::Result<()> {
         transcode_file_test(mp3_with_art(), false, external_art())
     }
+
+    #[test]
+    /// Attempt to get embedded art, even though no art is supplied
+    fn ogg_no_art_embed() -> miette::Result<()> {
+        transcode_file_test(ogg_without_art(), true, None)
+    }
+
+    #[test]
+    /// Keep embedded art
+    fn ogg_keep_embedded_art() -> miette::Result<()> {
+        transcode_file_test(ogg_with_art(), true, None)
+    }
+
+    #[test]
+    /// drop embedded album art
+    fn ogg_embedded_art_drop() -> miette::Result<()> {
+        transcode_file_test(ogg_with_art(), false, None)
+    }
+
+    #[test]
+    /// drop external art
+    fn ogg_external_art_drop() -> miette::Result<()> {
+        transcode_file_test(ogg_without_art(), false, external_art())
+    }
+
+    #[test]
+    /// embed external art
+    fn ogg_external_art_embed() -> miette::Result<()> {
+        transcode_file_test(ogg_without_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn ogg_both_embed() -> miette::Result<()> {
+        transcode_file_test(ogg_with_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn ogg_both_drop() -> miette::Result<()> {
+        transcode_file_test(ogg_with_art(), false, external_art())
+    }
+
+    #[test]
+    /// Attempt to get embedded art, even though no art is supplied
+    fn flac_no_art_embed() -> miette::Result<()> {
+        transcode_file_test(flac_without_art(), true, None)
+    }
+
+    #[test]
+    /// Keep embedded art
+    fn flac_keep_embedded_art() -> miette::Result<()> {
+        transcode_file_test(flac_with_art(), true, None)
+    }
+
+    #[test]
+    /// drop embedded album art
+    fn flac_embedded_art_drop() -> miette::Result<()> {
+        transcode_file_test(flac_with_art(), false, None)
+    }
+
+    #[test]
+    /// drop external art
+    fn flac_external_art_drop() -> miette::Result<()> {
+        transcode_file_test(flac_without_art(), false, external_art())
+    }
+
+    #[test]
+    /// embed external art
+    fn flac_external_art_embed() -> miette::Result<()> {
+        transcode_file_test(flac_without_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn flac_both_embed() -> miette::Result<()> {
+        transcode_file_test(flac_with_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn flac_both_drop() -> miette::Result<()> {
+        transcode_file_test(flac_with_art(), false, external_art())
+    }
+
+    #[test]
+    /// Attempt to get embedded art, even though no art is supplied
+    fn m4a_no_art_embed() -> miette::Result<()> {
+        transcode_file_test(m4a_without_art(), true, None)
+    }
+
+    #[test]
+    /// Keep embedded art
+    fn m4a_keep_embedded_art() -> miette::Result<()> {
+        transcode_file_test(m4a_with_art(), true, None)
+    }
+
+    #[test]
+    /// drop embedded album art
+    fn m4a_embedded_art_drop() -> miette::Result<()> {
+        transcode_file_test(m4a_with_art(), false, None)
+    }
+
+    #[test]
+    /// drop external art
+    fn m4a_external_art_drop() -> miette::Result<()> {
+        transcode_file_test(m4a_without_art(), false, external_art())
+    }
+
+    #[test]
+    /// embed external art
+    fn m4a_external_art_embed() -> miette::Result<()> {
+        transcode_file_test(m4a_without_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn m4a_both_embed() -> miette::Result<()> {
+        transcode_file_test(m4a_with_art(), true, external_art())
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn m4a_both_drop() -> miette::Result<()> {
+        transcode_file_test(m4a_with_art(), false, external_art())
+    }
 }
