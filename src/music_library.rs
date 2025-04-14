@@ -221,30 +221,24 @@ pub fn find_albums_in_directory(
     Ok(albums)
 }
 
-/// Checks if the source music file has been changed since it has been transcoded. First checks
-/// if the source file is newer (more recently changed), and if not, checks if the metadata is
-/// identical.
-pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
-    if !target.exists() {
-        // If the target doesn't exist, it must be newer.
-        return true;
-    }
+fn hash_file(path: &Path) -> Option<u64> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let hash = rapidhash::rapidhash_file(&mut file).ok()?;
+    Some(hash)
+}
 
-    // TODO: Instead of checking last modified time, save a hash of the original file upon
-    // encoding. Then here, check if the hash of the original file is still the same.
-    // Get the metadata for both files
-    let source_last_modified = fs::metadata(source)
-        .expect("Unable to read source file metadata.")
-        .modified()
-        .expect("could not get modification time for source");
-    let target_last_modified = fs::metadata(target)
-        .expect("Unable to read target file metadata.")
-        .modified()
-        .expect("could not get modification time for source");
-    if source_last_modified > target_last_modified {
+/// Checks if the source music file has been changed since it has been transcoded.
+pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
+    let Some(source_hash) = hash_file(source) else {
+        // If you can't determine a hash, no way to know if it has changed, so do it again.
         return true;
-    }
-    false
+    };
+    let Some(target_hash) = hash_file(target) else {
+        // If you can't determine a hash, no way to know if it has changed, so do it again.
+        return true;
+    };
+
+    source_hash != target_hash
 }
 
 pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegError> {
@@ -389,32 +383,75 @@ mod tests {
     fn with_embedded_album_art() -> PathBuf {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_data/with_art.mp3");
+        assert!(
+            d.exists(),
+            "test song with embedded album art does not exist."
+        );
         d
     }
 
     fn without_art() -> PathBuf {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_data/no_art.mp3");
+        assert!(d.exists(), "test song without album art does not exist.");
         d
     }
 
     fn external_art() -> Option<PathBuf> {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_data/cover_art.jpg");
+        assert!(d.exists(), "test song with embedded art does not exist.");
         Some(d)
     }
 
-    #[test]
-    fn has_music_file_changed_based_on_last_modified_time() {
+    /// Shared between all tests for has_music_file_changed
+    fn construct_has_music_file_changed(orig_name: &str, modified_name: &str) -> bool {
         use super::has_music_file_changed as f;
-        let older_file: PathBuf = "/tmp/older_file.mp3".into();
-        let newer_file: PathBuf = "/tmp/newer_file.mp3".into();
-        File::create(older_file.clone()).unwrap();
-        sleep(time::Duration::new(2, 0));
-        File::create(newer_file.clone()).unwrap();
-        assert!(!f(&older_file, &newer_file));
-        assert!(f(&newer_file, &older_file));
+        let mut original = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        original.push(format!("test_data/{}.mp3", orig_name));
+        let mut shadow = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        shadow.push(format!("test_data/{}.mp3", modified_name));
+        assert!(
+            original.exists(),
+            "{} does not exist, so cannot test",
+            original.display()
+        );
+        assert!(
+            shadow.exists(),
+            "{} does not exist, so cannot test.",
+            shadow.display()
+        );
+        let forward = f(&original, &shadow);
+        let backward = f(&original, &shadow);
+        assert!(
+            forward == backward,
+            "File changing checking should be bi-directional!"
+        );
+        forward
     }
+
+    #[test]
+    /// Calling it on the same file.
+    fn has_music_file_changed_identical_file() {
+        assert!(
+            !construct_has_music_file_changed("no_art", "no_art"),
+            "identical file, should say it has not changed"
+        )
+    }
+
+    /// For tests that should have changed
+    fn construct_should_have_changed(mod_suffix: &str) {
+        let is_changed =
+            construct_has_music_file_changed("no_art", &format!("no_art_changed_{}", mod_suffix));
+        assert!(is_changed, "Says file did not change, while it did!")
+    }
+
+    #[test]
+    fn has_music_file_changed_title() {
+        construct_should_have_changed("title")
+    }
+
+    // TODO: Unit tests for changed artist, album artist, lyrics, album art, etc.
 
     fn sync_song_test(
         identifier: &str,
@@ -436,6 +473,7 @@ mod tests {
         };
         let target = song.get_shadow_filename(&source_library, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
+        assert!(!target.exists());
         let updated = sync_song(
             &song,
             &source_library,

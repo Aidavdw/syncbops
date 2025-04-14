@@ -9,5 +9,7 @@ indicatif = { version = "0.17.11", features = ["rayon"] }
 itertools = "0.14.0"
 miette = { version = "7.5.0", features = ["fancy"] }
 random-string = "1.1.0"
+rapidhash = "1.4.0"
 rayon = "1.10.0"
+serde = "1.0.219"
 thiserror = "2.0.11"
