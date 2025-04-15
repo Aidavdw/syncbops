@@ -3,6 +3,7 @@ use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::song::Song;
 use indicatif::ProgressIterator;
+use itertools::Itertools;
 use rayon::prelude::*;
 use std::fmt::Display;
 use std::fs;
@@ -16,6 +17,13 @@ pub enum UpdateType {
     New,
     /// Updated because it was modified more recently than the shadow copy
     Overwritten,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ArtworkType {
+    Embedded,
+    External,
+    None,
 }
 
 // TODO: Phase out albums, use Song instead.
@@ -87,12 +95,21 @@ pub enum ImageType {
     Jpg,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum FileType {
+    Folder,
     Music,
     Art,
 }
 
+/// Returns None if the file does not exist or is not identifiable.
 fn identify_file_type(path: &Path) -> Option<FileType> {
+    if !path.exists() {
+        return None;
+    }
+    if path.is_dir() {
+        return Some(FileType::Folder);
+    };
     let ext = path.extension()?.to_ascii_lowercase();
 
     Some(match ext.as_os_str().to_str()? {
@@ -130,95 +147,76 @@ fn is_image_file_album_art(path: &Path) -> bool {
     stem_is_allowed && has_right_extension
 }
 
-pub fn find_albums_in_directory(
+//
+fn identify_entries_in_folder(
+    path: &Path,
+) -> Result<impl Iterator<Item = (PathBuf, FileType)> + '_, MusicLibraryError> {
+    if !path.is_dir() {
+        return Err(MusicLibraryError::NotADirectory {
+            path: path.to_path_buf(),
+        });
+    }
+    let dir = fs::read_dir(path).map_err(|_| MusicLibraryError::CouldNotProcessDir {
+        path: path.to_path_buf(),
+    })?;
+    let files_and_types = dir
+        .into_iter()
+        // Remove un-parseable items, and identify their types.
+        .filter_map(|entry| {
+            let Ok(valid_file_or_folder) = entry else {
+                eprintln!("Unable to process an entry in folder {}", path.display(),);
+                return None;
+            };
+            let path = valid_file_or_folder.path();
+            let Some(filetype) = identify_file_type(&path) else {
+                eprintln!("Could not identify file {}", path.display(),);
+                return None;
+            };
+            Some((path, filetype))
+        });
+    Ok(files_and_types)
+}
+
+pub fn find_songs_in_directory_and_subdirectories(
     path: &PathBuf,
-    verbose: bool,
-) -> Result<Vec<Album>, MusicLibraryError> {
+) -> Result<Vec<Song>, MusicLibraryError> {
     // Iterate through the folders. If there is a music file here, then this should be an
     // album.
     // if there are no music files here, then go some level deeper, because there might be
     // music in a sub-folder.
     // If there are no music files, and there are also no sub-folders, then ignore this foledr
     // and continue with the next one.
-    if !path.is_dir() {
-        return Err(MusicLibraryError::NotADirectory {
-            path: path.to_path_buf(),
-        });
-    }
-    let dir = match fs::read_dir(path) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!(
-                "Unable to process '{}' as a directory to find albums in: {}",
-                path.display(),
-                e
-            );
-            return Ok(Vec::new());
-        }
-    };
-    let mut albums = Vec::new();
-    let mut music_files = Vec::new();
-    let mut album_art = None;
-    for entry in dir {
-        let sub_path = match entry {
-            Ok(x) => x,
-            Err(e) => {
-                // Can't convert entry itself into a string, so logging needs to be a little
-                // more indirect
-                eprintln!(
-                    "Unable to process an entry in folder {}: {}",
-                    path.display(),
-                    e
-                );
-                continue;
-            }
-        }
-        .path();
-        if sub_path.is_dir() {
-            // Recurse
-            match find_albums_in_directory(&sub_path, verbose) {
-                Ok(albums_in_sub_dir) => albums.extend(albums_in_sub_dir),
-                Err(e) => eprintln!(
-                    "Error in processing sub-directory of {}: {}",
-                    path.display(),
-                    e
-                ),
-            }
-        } else {
-            let Some(filetype) = identify_file_type(&sub_path) else {
-                if verbose {
-                    println!("Ignoring file {}", sub_path.display());
-                }
-                continue;
-            };
-            match filetype {
-                FileType::Music => {
-                    music_files.push(sub_path);
-                }
-                FileType::Art => {
-                    // TODO: If album art if there is no album art, check one folder up if there is
-                    // cover art there
-                    if album_art.is_none() && is_image_file_album_art(&sub_path) {
-                        album_art = Some(sub_path)
-                    }
-                }
-            }
-        }
-    }
 
-    // If music files are found, create an album and add it to the collection
-    if !music_files.is_empty() {
-        albums.push(Album {
-            music_files,
-            album_art,
+    let files_and_folders_in_dir = identify_entries_in_folder(path)?.collect_vec();
+
+    // See if this folder contains album art
+    let folder_art = files_and_folders_in_dir
+        .iter()
+        .filter(|(_, filetype)| *filetype == FileType::Art)
+        .map(|(path, _)| path)
+        .filter(|image_path| is_image_file_album_art(image_path))
+        .next()
+        .cloned();
+
+    // If there are sub-directories, recurse into them.
+    let songs_in_sub_directories = files_and_folders_in_dir
+        .iter()
+        .filter(|(_, filetype)| *filetype == FileType::Folder)
+        .filter_map(move |(path, _)| find_songs_in_directory_and_subdirectories(&path).ok())
+        .flatten();
+
+    // Handle all song files in this dir
+    let songs = files_and_folders_in_dir
+        .iter()
+        .filter(|(_, filetype)| *filetype == FileType::Music)
+        .map(|(path, _)| Song {
+            path: path.clone(),
+            external_album_art: folder_art.clone(),
         });
-    } else if albums.is_empty() && verbose {
-        println!(
-            "No music files found in {} (and its subfolders)",
-            path.display()
-        )
-    };
-    Ok(albums)
+    //
+    let songs_in_this_dir_and_subdirs = songs.chain(songs_in_sub_directories).collect_vec();
+
+    Ok(songs_in_this_dir_and_subdirs)
 }
 
 fn hash_file(path: &Path) -> Option<u64> {
@@ -241,31 +239,13 @@ pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
     source_hash != target_hash
 }
 
-pub fn songs_without_album_art(albums: &[Album]) -> Result<Vec<PathBuf>, FfmpegError> {
-    // If there is an associated album art file, there definitely is album art. If there is
-    // not, check if there is embedde art for each file (costlier)
-    let songs = albums
-        .iter()
-        .filter(|album| album.album_art.is_none())
-        .flat_map(|album| album.music_files.clone())
-        .collect::<Vec<_>>();
-    // Separately run the querying function, because it can error. if it errors, exit the entire
-    // function.
-    // TODO: Return the paths where it resulted in an error too
-    // TODO: Show progress par here too
-    let results = songs
+pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
+    // TODO: Add progress bar here
+    let yee = songs
         .par_iter()
-        .map(|music_file| does_file_have_embedded_artwork(music_file))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let a = songs
-        .iter()
-        .zip(results.iter())
-        .filter(|(_, b)| !**b)
-        .map(|(filename, _)| filename.to_owned())
+        .filter(|song| song.has_artwork() == ArtworkType::None)
         .collect::<Vec<_>>();
-
-    Ok(a)
+    yee
 }
 
 /// How to handle album art
@@ -358,6 +338,9 @@ pub enum MusicLibraryError {
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
 
+    #[error("Could not process reading directory.")]
+    CouldNotProcessDir { path: PathBuf },
+
     #[error("Error in calling ffmpeg")]
     Ffmpeg(#[from] FfmpegError),
 
@@ -373,7 +356,7 @@ mod tests {
     use super::{songs_without_album_art, Album};
     use crate::{
         ffmpeg_interface::does_file_have_embedded_artwork,
-        music_library::{ArtStrategy, MusicFileType, UpdateType},
+        music_library::{ArtStrategy, ArtworkType, MusicFileType, UpdateType},
         song::Song,
     };
     use core::time;
@@ -492,7 +475,7 @@ mod tests {
             ),
             ArtStrategy::EmbedAll => {
                 // Can't have any artwork if there never was any.
-                if song.has_artwork()? {
+                if song.has_artwork() != ArtworkType::None {
                     assert!(
                         does_file_have_embedded_artwork(&target)?,
                         "ArtStrategy::EmbedAll, yet no embedded artwork.."
@@ -742,6 +725,21 @@ mod tests {
 
     // END ART STRATEGY = FILE_ONLY
 
+    fn mock_song(embedded_art: bool, external_album_art: bool) -> Song {
+        Song {
+            path: if embedded_art {
+                with_embedded_album_art()
+            } else {
+                without_art()
+            },
+            external_album_art: if external_album_art {
+                external_art()
+            } else {
+                None
+            },
+        }
+    }
+
     #[test]
     fn songs_without_album_art_test() -> miette::Result<()> {
         let file_with_embedded_artwork: PathBuf = with_embedded_album_art();
@@ -749,82 +747,40 @@ mod tests {
 
         // One album only, only embedded
         assert_eq!(
-            songs_without_album_art(&[Album {
-                music_files: vec![
-                    file_with_embedded_artwork.clone(),
-                    file_without_embedded_artwork.clone()
-                ],
-                album_art: None
-            }])?
-            .iter()
-            .exactly_one()
-            .unwrap(),
-            &file_without_embedded_artwork
+            songs_without_album_art(&[mock_song(true, false), mock_song(false, false),])
+                .iter()
+                .exactly_one()
+                .unwrap(),
+            &&mock_song(false, false)
         );
 
-        // Two albums, only embbeded
+        // More only embbeded
         assert_eq!(
             songs_without_album_art(&[
-                Album {
-                    music_files: vec![
-                        file_with_embedded_artwork.clone(),
-                        file_without_embedded_artwork.clone()
-                    ],
-                    album_art: None
-                },
-                Album {
-                    music_files: vec![
-                        file_with_embedded_artwork.clone(),
-                        file_without_embedded_artwork.clone()
-                    ],
-                    album_art: None
-                }
-            ])?
+                mock_song(true, false),
+                mock_song(true, false),
+                mock_song(false, false),
+                mock_song(false, false),
+            ])
             .len(),
             2
         );
 
-        // Two albums, one embedded, the other dedicated.
+        // one embedded, the other dedicated.
         assert_eq!(
             songs_without_album_art(&[
-                Album {
-                    music_files: vec![
-                        file_with_embedded_artwork.clone(),
-                        file_without_embedded_artwork.clone()
-                    ],
-                    album_art: None
-                },
-                Album {
-                    music_files: vec![
-                        file_with_embedded_artwork.clone(),
-                        file_without_embedded_artwork.clone()
-                    ],
-                    album_art: Some(PathBuf::default())
-                }
-            ])?
+                mock_song(true, false),
+                mock_song(false, false),
+                mock_song(false, true),
+            ])
             .iter()
             .exactly_one()
             .unwrap(),
-            &file_without_embedded_artwork
+            &&mock_song(false, false),
         );
 
-        assert!(songs_without_album_art(&[Album {
-            music_files: vec![
-                file_with_embedded_artwork.clone(),
-                file_without_embedded_artwork.clone()
-            ],
-            album_art: Some(PathBuf::default())
-        }])?
-        .is_empty());
+        assert!(songs_without_album_art(&[mock_song(false, false)]).is_empty());
 
-        assert!(songs_without_album_art(&[Album {
-            music_files: vec![
-                file_without_embedded_artwork.clone(),
-                file_without_embedded_artwork.clone()
-            ],
-            album_art: Some(PathBuf::default())
-        }])?
-        .is_empty());
         Ok(())
     }
 }

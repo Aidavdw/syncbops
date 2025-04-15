@@ -4,8 +4,8 @@ mod song;
 use clap::{arg, Parser};
 use indicatif::ParallelProgressIterator;
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_albums_in_directory, songs_without_album_art,
-    sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
+    songs_without_album_art, sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -63,34 +63,17 @@ fn main() -> miette::Result<()> {
     }
 
     println!("Discovering files in {}", source_library.display());
-    let albums = find_albums_in_directory(&source_library, cli.verbose)?;
-    println!(
-        "Discovered {} songs in {} folders.",
-        albums
-            .iter()
-            .map(|album| album.music_files.len())
-            .sum::<usize>(),
-        albums.len()
-    );
+    let songs = find_songs_in_directory_and_subdirectories(&source_library)?;
+    println!("Discovered {} songs.", songs.len());
     // Report if there are songs without album art.
     println!("Checking for songs without album art...");
-    let songs_without_album_art = songs_without_album_art(&albums)?;
+    let songs_without_album_art = songs_without_album_art(&songs);
     if !songs_without_album_art.is_empty() {
         println!("Warning! There are songs without any album art (either embedded or found in Cover.jpg, folder.png, etc:");
         for x in songs_without_album_art {
-            println!("\t- {}", x.display())
+            println!("\t- {}", x)
         }
     }
-
-    // Convert Albums to Songs
-    let mut songs = Vec::new();
-    for album in albums {
-        songs.extend(album.music_files.iter().map(|music_file| Song {
-            path: music_file.to_path_buf(),
-            external_album_art: album.album_art.clone(),
-        }));
-    }
-    let songs = songs; // unmut
 
     // If the target dir coes not exist, warn the user that it does not exist. Don't just
     // willy-nilly create it, because they could've made a typo.
