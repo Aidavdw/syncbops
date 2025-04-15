@@ -76,7 +76,6 @@ impl Song {
 impl Display for Song {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let p = self.path.to_str().unwrap();
-        write!(f, "Song @{}, artwork={:?}", p, self.has_artwork());
-        Ok(())
+        write!(f, "Song @{}, artwork={:?}", p, self.has_artwork())
     }
 }

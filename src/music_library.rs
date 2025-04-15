@@ -26,16 +26,6 @@ pub enum ArtworkType {
     None,
 }
 
-// TODO: Phase out albums, use Song instead.
-/// Represents an album: A directory with songs in it.
-#[derive(Debug)]
-pub struct Album {
-    /// All the files in it that are music
-    pub music_files: Vec<PathBuf>,
-    /// If the album has an art file, like a cover.jpg.
-    pub album_art: Option<PathBuf>,
-}
-
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum MusicFileType {
     /// Transcode to Mp3. Very widely supported, but not very good.
@@ -353,13 +343,12 @@ pub enum MusicLibraryError {
 
 #[cfg(test)]
 mod tests {
-    use super::{songs_without_album_art, Album};
+    use super::songs_without_album_art;
     use crate::{
         ffmpeg_interface::does_file_have_embedded_artwork,
         music_library::{ArtStrategy, ArtworkType, MusicFileType, UpdateType},
         song::Song,
     };
-    use core::time;
     use itertools::Itertools;
     use std::{fs::File, path::PathBuf, thread::sleep};
 
@@ -742,8 +731,9 @@ mod tests {
 
     #[test]
     fn songs_without_album_art_test() -> miette::Result<()> {
-        let file_with_embedded_artwork: PathBuf = with_embedded_album_art();
-        let file_without_embedded_artwork: PathBuf = without_art();
+        assert!(songs_without_album_art(&[mock_song(false, true)]).is_empty());
+        assert!(songs_without_album_art(&[mock_song(true, false)]).is_empty());
+        assert!(!songs_without_album_art(&[mock_song(false, false)]).is_empty());
 
         // One album only, only embedded
         assert_eq!(
@@ -778,8 +768,6 @@ mod tests {
             .unwrap(),
             &&mock_song(false, false),
         );
-
-        assert!(songs_without_album_art(&[mock_song(false, false)]).is_empty());
 
         Ok(())
     }
