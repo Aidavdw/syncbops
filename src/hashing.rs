@@ -1,19 +1,13 @@
-use core::hash;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    default,
-    env::home_dir,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
     time::SystemTime,
 };
 
-use crate::{
-    music_library::{library_relative_path, UpdateType},
-    song::Song,
-};
+use crate::music_library::{library_relative_path, UpdateType};
 
 /// Data about how a file is at a certain point in time. By comparing SyncRecords, you can see
 /// if a file is out of date.
@@ -60,7 +54,7 @@ pub fn compare_records(source: &SyncRecord, previous: &SyncRecord) -> UpdateType
         return U::Overwritten;
     }
     // New one cannot be hashed. We don't know about the new file, so can only overwrite
-    return U::Overwritten;
+    U::Overwritten
 }
 
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
@@ -85,7 +79,7 @@ pub fn try_read_records(target_library: &Path) -> PreviousSyncDb {
 
 fn load_previous_sync(path: &Path) -> Option<PreviousSyncDb> {
     // Deserialise it. If it fails, it's better to just handle it like a new sync; assume an empty PreviousSyncDb.
-    let file = match File::open(path.clone()) {
+    let file = match File::open(path) {
         Ok(x) => x,
         Err(e) => {
             eprintln!(
@@ -151,7 +145,7 @@ pub fn try_write_records(previous_sync_db: &PreviousSyncDb, target_library: &Pat
 
 fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool {
     // Open file for writing
-    let file = match File::create(path.clone()) {
+    let file = match File::create(path) {
         Ok(x) => x,
         Err(e) => {
             eprintln!(
@@ -168,7 +162,7 @@ fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool
         eprintln!("Could not write to this file :(");
         return false;
     }
-    return true;
+    true
 }
 
 pub fn save_to_previous_sync_db(previous_sync_db: &mut PreviousSyncDb, sync_record: SyncRecord) {

@@ -1,4 +1,3 @@
-use crate::ffmpeg_interface::does_file_have_embedded_artwork;
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::hashing::compare_records;
@@ -175,7 +174,7 @@ fn identify_entries_in_folder(
 }
 
 pub fn find_songs_in_directory_and_subdirectories(
-    path: &PathBuf,
+    path: &Path,
 ) -> Result<Vec<Song>, MusicLibraryError> {
     // Iterate through the folders. If there is a music file here, then this should be an
     // album.
@@ -400,7 +399,7 @@ mod tests {
     use super::songs_without_album_art;
     use crate::{
         ffmpeg_interface::does_file_have_embedded_artwork,
-        hashing::{PreviousSyncDb, SyncRecord},
+        hashing::PreviousSyncDb,
         music_library::{
             get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, MusicFileType,
             UpdateType,
@@ -408,7 +407,7 @@ mod tests {
         song::Song,
     };
     use itertools::Itertools;
-    use std::{fs::File, path::PathBuf, thread::sleep};
+    use std::path::PathBuf;
 
     fn with_embedded_album_art() -> PathBuf {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

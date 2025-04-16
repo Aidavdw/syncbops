@@ -1,14 +1,5 @@
-use crate::{
-    ffmpeg_interface::{does_file_have_embedded_artwork, FfmpegError},
-    hashing::PreviousSyncDb,
-    music_library::{
-        has_music_file_changed, ArtworkType, MusicFileType, MusicLibraryError, UpdateType,
-    },
-};
-use std::{
-    fmt::Display,
-    path::{Path, PathBuf},
-};
+use crate::{ffmpeg_interface::does_file_have_embedded_artwork, music_library::ArtworkType};
+use std::{fmt::Display, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
 pub struct Song {
