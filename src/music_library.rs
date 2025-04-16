@@ -1,6 +1,10 @@
 use crate::ffmpeg_interface::does_file_have_embedded_artwork;
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
+use crate::hashing::compare_records;
+use crate::hashing::hash_file;
+use crate::hashing::PreviousSyncDb;
+use crate::hashing::SyncRecord;
 use crate::song::Song;
 use indicatif::ProgressIterator;
 use itertools::Itertools;
@@ -17,6 +21,8 @@ pub enum UpdateType {
     New,
     /// Updated because it was modified more recently than the shadow copy
     Overwritten,
+    /// Actually unchanged, but forced into being overwritten.
+    ForcefullyOverwritten,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -209,13 +215,8 @@ pub fn find_songs_in_directory_and_subdirectories(
     Ok(songs_in_this_dir_and_subdirs)
 }
 
-fn hash_file(path: &Path) -> Option<u64> {
-    let mut file = std::fs::File::open(path).ok()?;
-    let hash = rapidhash::rapidhash_file(&mut file).ok()?;
-    Some(hash)
-}
-
 /// Checks if the source music file has been changed since it has been transcoded.
+/// TODO: Revert this to its original purpose: checking if the dates are different.
 pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
     let Some(source_hash) = hash_file(source) else {
         // If you can't determine a hash, no way to know if it has changed, so do it again.
@@ -238,6 +239,16 @@ pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
     yee
 }
 
+/// Where to put the synchronised copy
+pub fn get_shadow_filename(
+    library_relative_path: &Path,
+    target_library: &Path,
+    // TODO: Change to FileType, so I can re-use the same code for images.
+    filetype: &MusicFileType,
+) -> PathBuf {
+    target_library.join(library_relative_path.with_extension(filetype.to_string()))
+}
+
 /// How to handle album art
 #[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum ArtStrategy {
@@ -258,23 +269,55 @@ pub fn sync_song(
     target_library: &Path,
     target_filetype: MusicFileType,
     art_strategy: ArtStrategy,
+    previous_sync_db: &PreviousSyncDb,
     force: bool,
     dry_run: bool,
 ) -> Result<UpdateType, MusicLibraryError> {
-    // Early exit if it doesn't need to be updated.
-    // Can't change files in place with ffmpeg, so if we need to update then we need to
-    // overwrite the file anyway.
-    let mut how_updated = song.status(source_library, target_library, &target_filetype);
-    if how_updated == UpdateType::Unchanged && !force {
-        return Ok(UpdateType::Unchanged);
-    }
-    if how_updated == UpdateType::Unchanged && force {
-        how_updated = UpdateType::Overwritten
-    }
+    use UpdateType as U;
+    let new_sync_record = SyncRecord::from_file_path(&song.path, source_library);
 
+    // Compare this potentially new file to what has been synced before.
+    // If it is not in the sync_db, consider that the file should be overwritten anyway.
+    let status = match previous_sync_db.get(&new_sync_record.library_relative_path) {
+        Some(previous_record) => compare_records(&new_sync_record, previous_record),
+        None => U::New,
+    };
+
+    // Early exit if unchanged.
+    // If force, don't early exit.
+    // Instead, overwrite.
+    let status = match status {
+        UpdateType::Unchanged => {
+            if force {
+                UpdateType::ForcefullyOverwritten
+            } else {
+                return Ok(status);
+            }
+        }
+        // Don't touch the other statuses
+        _ => status,
+    };
+
+    // TODO:If it exists with a different filetype, give a warning
+    let shadow = get_shadow_filename(source_library, target_library, &target_filetype);
+    // If the previous_sync_db thinks its new, but the file already exists, it is actually
+    // overwritten.
+    let status = if shadow.exists() && status == U::New {
+        U::Overwritten
+    } else {
+        status
+    };
+    // Similarly, if it thinks it is overwritten, but it actually was actually not there yet,
+    // it is re-added.
+    let status = if !shadow.exists() && status == U::Overwritten {
+        U::New
+    } else {
+        status
+    };
+
+    // Can't change files in place with ffmpeg, so if we need to update then we need to
+    // overwrite the file fully.
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
-    // TODO: Only ignore error if the folder already exists, otherwise bubble up error.
-    let shadow = song.get_shadow_filename(source_library, target_library, &target_filetype);
     if !dry_run {
         let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
     }
@@ -296,7 +339,15 @@ pub fn sync_song(
         )?
     };
 
-    Ok(how_updated)
+    Ok(status)
+}
+
+/// gets the path relative to the library.
+pub fn library_relative_path(full_path: &Path, source_library: &Path) -> PathBuf {
+    full_path
+        .strip_prefix(source_library)
+        .unwrap()
+        .to_path_buf()
 }
 
 /// Returns the path to the new cover art if the file is copied over.
@@ -346,7 +397,11 @@ mod tests {
     use super::songs_without_album_art;
     use crate::{
         ffmpeg_interface::does_file_have_embedded_artwork,
-        music_library::{ArtStrategy, ArtworkType, MusicFileType, UpdateType},
+        hashing::{PreviousSyncDb, SyncRecord},
+        music_library::{
+            get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, MusicFileType,
+            UpdateType,
+        },
         song::Song,
     };
     use itertools::Itertools;
@@ -425,7 +480,9 @@ mod tests {
 
     // TODO: Unit tests for changed artist, album artist, lyrics, album art, etc.
 
-    fn sync_song_test(
+    /// convenience function to simulate adding a new song.
+    /// Used for checking if the resulting som actually has the data that is requested of it.
+    fn sync_new_song_test(
         identifier: &str,
         song: Song,
         art_strategy: ArtStrategy,
@@ -443,15 +500,19 @@ mod tests {
             vbr: true,
             quality: 3,
         };
-        let target = song.get_shadow_filename(&source_library, &target_library, &target_filetype);
+        let target = get_shadow_filename(&song.path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
         assert!(!target.exists());
+        // Should be a new file, so no previous entries of it either.
+        let previous_sync_db = PreviousSyncDb::default();
+
         let updated = sync_song(
             &song,
             &source_library,
             &target_library,
             target_filetype,
             art_strategy,
+            &previous_sync_db,
             false,
             false,
         )?;
@@ -498,7 +559,7 @@ mod tests {
     #[test]
     /// Song with embedded album art, no external, art strategy = none.
     fn sync_song_artstrat_none_embedded_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_none/embedded",
             Song {
                 path: with_embedded_album_art(),
@@ -511,7 +572,7 @@ mod tests {
     #[test]
     /// Song with external art only, art strategy = none
     fn sync_song_artstrat_none_external_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_none/external",
             Song {
                 path: without_art(),
@@ -524,7 +585,7 @@ mod tests {
     #[test]
     /// Song with no art at all, art strategy = none
     fn sync_song_artstrat_none_no_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_none/no-art",
             Song {
                 path: without_art(),
@@ -537,7 +598,7 @@ mod tests {
     #[test]
     /// Song with both embedded and external art, art strategy = none.
     fn sync_song_artstrat_none_both() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_none/both",
             Song {
                 path: with_embedded_album_art(),
@@ -553,7 +614,7 @@ mod tests {
     #[test]
     /// Song with embedded album art, no external, art strategy = none.
     fn sync_song_artstrat_embed_embedded_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_embed/embedded",
             Song {
                 path: with_embedded_album_art(),
@@ -566,7 +627,7 @@ mod tests {
     #[test]
     /// Song with external art only, art strategy = none
     fn sync_song_artstrat_embed_external_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_embed/external",
             Song {
                 path: without_art(),
@@ -579,7 +640,7 @@ mod tests {
     #[test]
     /// Song with no art at all, art strategy = none
     fn sync_song_artstrat_embed_no_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_embed/no-art",
             Song {
                 path: without_art(),
@@ -592,7 +653,7 @@ mod tests {
     #[test]
     /// Song with both embedded and external art, art strategy = none.
     fn sync_song_artstrat_embed_both() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_embed/both",
             Song {
                 path: with_embedded_album_art(),
@@ -608,7 +669,7 @@ mod tests {
     #[test]
     /// Song with embedded album art, no external, art strategy = prefer file.
     fn sync_song_artstrat_prefer_file_embedded_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_prefer_file/embedded",
             Song {
                 path: with_embedded_album_art(),
@@ -621,7 +682,7 @@ mod tests {
     #[test]
     /// Song with external art only, art strategy = prefer_file
     fn sync_song_artstrat_prefer_file_external_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_prefer_file/external",
             Song {
                 path: without_art(),
@@ -634,7 +695,7 @@ mod tests {
     #[test]
     /// Song with no art at all, art strategy = prefer_file
     fn sync_song_artstrat_prefer_file_no_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_prefer_file/no-art",
             Song {
                 path: without_art(),
@@ -647,7 +708,7 @@ mod tests {
     #[test]
     /// Song with both embedded and external art, art strategy = prefer_file.
     fn sync_song_artstrat_prefer_file_both() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_prefer_file/both",
             Song {
                 path: with_embedded_album_art(),
@@ -663,7 +724,7 @@ mod tests {
     #[test]
     /// Song with embedded album art, no external, art strategy = file_only.
     fn sync_song_artstrat_file_only_embedded_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_file_only/embedded",
             Song {
                 path: with_embedded_album_art(),
@@ -676,7 +737,7 @@ mod tests {
     #[test]
     /// Song with external art only, art strategy = file_only
     fn sync_song_artstrat_file_only_external_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_file_only/external",
             Song {
                 path: without_art(),
@@ -689,7 +750,7 @@ mod tests {
     #[test]
     /// Song with no art at all, art strategy = file_only
     fn sync_song_artstrat_file_only_no_art() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_file_only/no-art",
             Song {
                 path: without_art(),
@@ -702,7 +763,7 @@ mod tests {
     #[test]
     /// Song with both embedded and external art, art strategy = file_only.
     fn sync_song_artstrat_file_only_both() -> miette::Result<()> {
-        sync_song_test(
+        sync_new_song_test(
             "artstrat_file_only/both",
             Song {
                 path: with_embedded_album_art(),

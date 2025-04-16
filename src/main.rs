@@ -1,7 +1,9 @@
 mod ffmpeg_interface;
+mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
+use hashing::load_previous_sync_db;
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
@@ -92,6 +94,10 @@ fn main() -> miette::Result<()> {
     if cli.force {
         println!("Forced re-writing every music file.")
     }
+
+    // Load the results from the last hash
+    let mut previous_sync_db = load_previous_sync_db(&target_library);
+
     let sync_results: SyncResults = songs
         .par_iter()
         .progress()
@@ -104,6 +110,7 @@ fn main() -> miette::Result<()> {
                     &target_library,
                     cli.target_filetype.clone(),
                     art_strategy,
+                    &previous_sync_db,
                     cli.force,
                     cli.dry_run,
                 ),
@@ -159,6 +166,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     UpdateType::Unchanged => n_unchanged += 1,
                     UpdateType::New => n_new += 1,
                     UpdateType::Overwritten => n_overwritten += 1,
+                    UpdateType::ForcefullyOverwritten => n_overwritten += 1,
                 };
                 song_updates.push_str(&format!("{} →  [{:?}]\n", song.path.display(), update_type))
             }
