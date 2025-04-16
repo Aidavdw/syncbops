@@ -9,11 +9,12 @@ use crate::song::Song;
 use indicatif::ProgressIterator;
 use itertools::Itertools;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub enum UpdateType {
     /// The file did not need to be changed, as it is up-to-date
     Unchanged,
@@ -272,7 +273,7 @@ pub fn sync_song(
     previous_sync_db: &PreviousSyncDb,
     force: bool,
     dry_run: bool,
-) -> Result<UpdateType, MusicLibraryError> {
+) -> Result<SyncRecord, MusicLibraryError> {
     use UpdateType as U;
     let new_sync_record = SyncRecord::from_file_path(&song.path, source_library);
 
@@ -291,7 +292,7 @@ pub fn sync_song(
             if force {
                 UpdateType::ForcefullyOverwritten
             } else {
-                return Ok(status);
+                return Ok(new_sync_record.set_update_type(status));
             }
         }
         // Don't touch the other statuses
@@ -340,7 +341,8 @@ pub fn sync_song(
         )?
     };
 
-    Ok(status)
+    // The sync record needs to have its new status written to it still!
+    Ok(new_sync_record.set_update_type(status))
 }
 
 /// gets the path relative to the library.
@@ -508,7 +510,7 @@ mod tests {
         // Should be a new file, so no previous entries of it either.
         let previous_sync_db = PreviousSyncDb::default();
 
-        let updated = sync_song(
+        let updated_record = sync_song(
             &song,
             &source_library,
             &target_library,
@@ -519,7 +521,7 @@ mod tests {
             false,
         )?;
 
-        assert!(updated == UpdateType::New);
+        assert!(updated_record.update_type.unwrap() == UpdateType::New);
         match art_strategy {
             ArtStrategy::None => assert!(
                 !does_file_have_embedded_artwork(&target)?,

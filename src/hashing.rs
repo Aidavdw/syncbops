@@ -1,6 +1,9 @@
 use core::hash;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    fs::File,
+    io::BufReader,
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -12,6 +15,7 @@ use crate::{
 
 /// Data about how a file is at a certain point in time. By comparing SyncRecords, you can see
 /// if a file is out of date.
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SyncRecord {
     pub library_relative_path: PathBuf,
     /// None for any SyncRecords in the source library.
@@ -28,6 +32,12 @@ impl SyncRecord {
             date: SystemTime::now(),
             hash: hash_file(file),
         }
+    }
+
+    pub fn set_update_type(self, update_type: UpdateType) -> SyncRecord {
+        let mut proxy = self;
+        proxy.update_type = Some(update_type);
+        proxy
     }
 }
 pub fn compare_records(source: &SyncRecord, previous: &SyncRecord) -> UpdateType {
@@ -54,7 +64,31 @@ pub fn compare_records(source: &SyncRecord, previous: &SyncRecord) -> UpdateType
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
 
 pub fn load_previous_sync_db(target_library: &Path) -> PreviousSyncDb {
-    todo!()
+    const PREVIOUS_SYNC_DB_FILENAME: &str = "bopsync.dat";
+    let path = target_library.join(PREVIOUS_SYNC_DB_FILENAME);
+
+    // Deserialise it. If it fails, it's better to just handle it like a new sync; assume an empty PreviousSyncDb.
+    let file = match File::open(path.clone()) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!(
+                "Cannot open {} in the target library ({}): {}. Assuming there is no previous sync data.", PREVIOUS_SYNC_DB_FILENAME, target_library.display(), e
+            );
+            return PreviousSyncDb::default();
+        }
+    };
+    // Open the file in read-only mode with buffer, and parse into PreviousSyncDb
+    let reader = BufReader::new(file);
+    let previous_sync_db: PreviousSyncDb = match serde_json::from_reader(reader) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!(
+                "Cannot load previous sync result from {}: {}. Ignoring contents of the file, assuming there is no previous sync data.", path.display(), e
+            );
+            return PreviousSyncDb::default();
+        }
+    };
+    previous_sync_db
 }
 
 pub fn save_to_previous_sync_db(previous_sync_db: &mut PreviousSyncDb, sync_record: SyncRecord) {

@@ -3,7 +3,7 @@ mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
-use hashing::load_previous_sync_db;
+use hashing::{load_previous_sync_db, save_to_previous_sync_db, SyncRecord};
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
@@ -14,7 +14,7 @@ use song::Song;
 use std::path::PathBuf;
 
 /// What all the individual attempts at syncing are collected into.
-type SyncResults<'a> = Vec<(&'a Song, Result<UpdateType, MusicLibraryError>)>;
+type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
 
 #[derive(clap::Parser)]
 #[command(version, about, long_about = None)] // Read from cargo.toml
@@ -118,6 +118,13 @@ fn main() -> miette::Result<()> {
         })
         .collect::<SyncResults>();
 
+    // Might be sorted differently because of parallel execution, so put in order again.
+    let sync_results = {
+        let mut unsorted = sync_results;
+        unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
+        unsorted
+    };
+
     // Go over all the dedicated album art.
     // If there is a dedicated art file for the music file, add it. If it already exists, it is probably already added by another file
     println!("Checking and copying external cover art...");
@@ -131,6 +138,17 @@ fn main() -> miette::Result<()> {
         .filter_map(|o| o.to_owned())
         .collect::<Vec<_>>();
 
+    for (_song, update_result) in &sync_results {
+        let Ok(record) = update_result else {
+            // Can't update syncdb if it errored.
+            continue;
+        };
+        debug_assert!(record.update_type.is_some());
+        // NOTE: If miette could work with references, I could instead do printing a summary first,
+        // and then owned move the records into the db.
+        // Not the case, so a .clone() is necessary here.
+        save_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
+    }
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
 
     Ok(())
@@ -143,11 +161,8 @@ fn main() -> miette::Result<()> {
 }
 
 fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: bool) -> String {
-    // Might be sorted differently because of parallel execution, so put in order again.
-    let mut unsorted = sync_results;
-    unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
-    let sync_results = unsorted;
-
+    // Thif function should use an owned SyncResults, because otherwise you can't get nice
+    // miette::report
     let mut summary = String::with_capacity(4000);
     let mut n_unchanged = 0;
     let mut n_new = 0;
@@ -161,7 +176,10 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     let mut song_updates = String::new();
     for (song, r) in sync_results {
         match r {
-            Ok(update_type) => {
+            Ok(sync_record) => {
+                let update_type = sync_record
+                    .update_type
+                    .expect("Empty update type. Implementation error");
                 match update_type {
                     UpdateType::Unchanged => n_unchanged += 1,
                     UpdateType::New => n_new += 1,
