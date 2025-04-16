@@ -299,7 +299,8 @@ pub fn sync_song(
     };
 
     // TODO:If it exists with a different filetype, give a warning
-    let shadow = get_shadow_filename(source_library, target_library, &target_filetype);
+    let library_relative_path = library_relative_path(&song.path, source_library);
+    let shadow = get_shadow_filename(&library_relative_path, target_library, &target_filetype);
     // If the previous_sync_db thinks its new, but the file already exists, it is actually
     // overwritten.
     let status = if shadow.exists() && status == U::New {
@@ -500,7 +501,8 @@ mod tests {
             vbr: true,
             quality: 3,
         };
-        let target = get_shadow_filename(&song.path, &target_library, &target_filetype);
+        let library_relative_path = library_relative_path(&song.path, &source_library);
+        let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
         assert!(!target.exists());
         // Should be a new file, so no previous entries of it either.
