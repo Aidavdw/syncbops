@@ -3,7 +3,9 @@ mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
-use hashing::{load_previous_sync_db, save_to_previous_sync_db, SyncRecord};
+use hashing::{
+    load_previous_sync_db, save_to_previous_sync_db, write_sync_db_to_target_library, SyncRecord,
+};
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
@@ -149,6 +151,8 @@ fn main() -> miette::Result<()> {
         // Not the case, so a .clone() is necessary here.
         save_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
     }
+
+    write_sync_db_to_target_library(&previous_sync_db, &target_library);
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
 
     Ok(())

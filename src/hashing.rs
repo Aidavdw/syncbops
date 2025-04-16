@@ -62,9 +62,9 @@ pub fn compare_records(source: &SyncRecord, previous: &SyncRecord) -> UpdateType
 }
 
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
+const PREVIOUS_SYNC_DB_FILENAME: &str = "bopsync.dat";
 
 pub fn load_previous_sync_db(target_library: &Path) -> PreviousSyncDb {
-    const PREVIOUS_SYNC_DB_FILENAME: &str = "bopsync.dat";
     let path = target_library.join(PREVIOUS_SYNC_DB_FILENAME);
 
     // Deserialise it. If it fails, it's better to just handle it like a new sync; assume an empty PreviousSyncDb.
@@ -89,6 +89,28 @@ pub fn load_previous_sync_db(target_library: &Path) -> PreviousSyncDb {
         }
     };
     previous_sync_db
+}
+
+pub fn write_sync_db_to_target_library(previous_sync_db: &PreviousSyncDb, target_library: &Path) {
+    let path = target_library.join(PREVIOUS_SYNC_DB_FILENAME);
+
+    // Open file for writing
+    let file = match File::create(path.clone()) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!(
+                "Cannot open {} in the target library ({}) for writing: {}. No previous sync data will be saved. This probably means your next sync will unnecessarily redo a lot of things :(", PREVIOUS_SYNC_DB_FILENAME, target_library.display(), e
+            );
+            // TODO: See if we can write to an alt name, to the user's home directory, or to
+            // the current directory. and warn the user of it.
+            // Just call this same function again, but now with a different target file.
+            return;
+        }
+    };
+    let written = serde_json::to_writer(file, previous_sync_db);
+    if written.is_err() {
+        eprintln!("Could not write to this file :(")
+    }
 }
 
 pub fn save_to_previous_sync_db(previous_sync_db: &mut PreviousSyncDb, sync_record: SyncRecord) {
