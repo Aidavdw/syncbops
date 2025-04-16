@@ -3,9 +3,7 @@ mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
-use hashing::{
-    load_previous_sync_db, save_to_previous_sync_db, write_sync_db_to_target_library, SyncRecord,
-};
+use hashing::{save_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
@@ -98,7 +96,7 @@ fn main() -> miette::Result<()> {
     }
 
     // Load the results from the last hash
-    let mut previous_sync_db = load_previous_sync_db(&target_library);
+    let mut previous_sync_db = try_read_records(&target_library);
 
     let sync_results: SyncResults = songs
         .par_iter()
@@ -152,7 +150,7 @@ fn main() -> miette::Result<()> {
         save_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
     }
 
-    write_sync_db_to_target_library(&previous_sync_db, &target_library);
+    try_write_records(&previous_sync_db, &target_library);
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
 
     Ok(())
