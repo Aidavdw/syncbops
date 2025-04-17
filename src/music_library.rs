@@ -283,13 +283,29 @@ pub fn sync_song(
         None => U::New,
     };
 
+    // TODO:If it exists with a different filetype, give a warning
+    let library_relative_path = library_relative_path(&song.path, source_library);
+    let shadow = get_shadow_filename(&library_relative_path, target_library, &target_filetype);
+
+    // If the file is in the previous_sync_db, but is not actually present,
+    // consider it a missing file.
+    let status = if !shadow.exists() && !matches!(status, U::New) {
+        eprintln!(
+            "{} has been synced previously, but its file is missing. Considering it a 'new' file.",
+            library_relative_path.display()
+        );
+        U::New
+    } else {
+        status
+    };
+
     // Early exit if unchanged.
     // If force, don't early exit.
     // Instead, overwrite.
     let status = match status {
-        UpdateType::Unchanged => {
+        U::Unchanged => {
             if force {
-                UpdateType::ForcefullyOverwritten
+                U::ForcefullyOverwritten
             } else {
                 return Ok(new_sync_record.set_update_type(status));
             }
@@ -298,9 +314,6 @@ pub fn sync_song(
         _ => status,
     };
 
-    // TODO:If it exists with a different filetype, give a warning
-    let library_relative_path = library_relative_path(&song.path, source_library);
-    let shadow = get_shadow_filename(&library_relative_path, target_library, &target_filetype);
     // If the previous_sync_db thinks its new, but the file already exists, it is actually
     // overwritten.
     let status = if shadow.exists() && status == U::New {
