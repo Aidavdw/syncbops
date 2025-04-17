@@ -1,4 +1,5 @@
 use itertools::Itertools;
+use regex::Regex;
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -6,7 +7,7 @@ use std::{
 
 use crate::music_library::MusicFileType;
 
-/// Queries `ffprobe "04. FREEDOM.mp3" 2>&1 | grep "Cover"`.
+/// Queries `ffprobe "<filename>" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
     let mut binding = Command::new("ffprobe");
     binding.arg(path);
@@ -22,6 +23,69 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
     let txt = String::from_utf8(ffprobe.stderr).unwrap();
     // In ffmpeg, embedded artworks are considered as extra "streams". They are, confusingly enough, of type video. Generally they are also tagged with a meta tag, such as "cover"
     Ok(txt.contains("Video"))
+}
+
+/// Gets stuff like title, artist name, etc.
+/// Also, whether the song has album art.
+#[derive(Debug)]
+pub struct SongMetaData {
+    title: Option<String>,
+    bitrate_kbps: u32,
+    has_embedded_album_art: bool,
+}
+
+impl SongMetaData {
+    pub fn parse_file(path: &Path) -> Result<SongMetaData, FfmpegError> {
+        parse_music_file_metadata(path)
+    }
+}
+
+fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
+    let mut binding = Command::new("ffprobe");
+    binding.arg(path);
+    let ffprobe = binding
+        .output()
+        .map_err(|e| FfmpegError::CheckForAlbumArtCommand {
+            source: e,
+            arguments: binding
+                .get_args()
+                .map(|osstr| osstr.to_string_lossy())
+                .join(" "),
+        })?;
+    let txt = String::from_utf8(ffprobe.stderr).unwrap();
+
+    // Regex patterns to match the title, bitrate, and check for streams
+    let metadata_re = Regex::new(r"(?s)Metadata:\n(?P<meta>(?:\s{4,}.+\n)+)").unwrap();
+    let title_re = Regex::new(r"^\s{4,}title\s*:\s*(?P<title>.+)$").unwrap();
+    let bitrate_re = Regex::new(r"Stream #\d+:\d+: Audio:.*?, (?P<bitrate>\d+)\s*kb/s").unwrap();
+    let has_video_re = Regex::new(r"Stream #\d+:\d+: Video:.*\(attached pic\)").unwrap();
+
+    // 1. Extract the title from the global metadata block
+    let title = metadata_re.captures(&txt).and_then(|cap| {
+        cap["meta"].lines().find_map(|line| {
+            title_re
+                .captures(line)
+                .map(|m| m["title"].trim().to_string())
+        })
+    });
+
+    // 2. Extract audio bitrate
+    let bitrate_kbps: u32 = bitrate_re
+        .captures(&txt)
+        .and_then(|cap| cap.name("bitrate"))
+        .and_then(|m| m.as_str().parse().ok())
+        .ok_or_else(|| FfmpegError::Bitrate {
+            path: "Failed to find audio bitrate".to_string(),
+        })?;
+
+    // 3. Check for embedded album art (presence of video stream with "attached pic")
+    let has_embedded_album_art = has_video_re.is_match(&txt);
+
+    Ok(SongMetaData {
+        title,
+        bitrate_kbps,
+        has_embedded_album_art,
+    })
 }
 
 /// Takes a path of a song file, transcodes it using ffmpeg, and saves it to the target path. Returns the path of the output file. Like `ffmpeg -i [input file] -codec:a libmp3lame -q:a [V-level] [output file].mp3`
@@ -128,12 +192,15 @@ pub enum FfmpegError {
         source: std::io::Error,
         arguments: String,
     },
+
+    #[error("Could not determine the bitrate for file `{path}`")]
+    Bitrate { path: String },
 }
 
 #[cfg(test)]
 mod tests {
     use super::does_file_have_embedded_artwork;
-    use crate::music_library::MusicFileType;
+    use crate::{ffmpeg_interface::SongMetaData, music_library::MusicFileType};
     use std::path::PathBuf;
 
     fn mp3_with_art() -> PathBuf {
@@ -191,13 +258,18 @@ mod tests {
     }
 
     #[test]
-    fn does_file_have_cover_art_mp3_yes() -> miette::Result<()> {
+    fn metadata_mp3_with_art() -> miette::Result<()> {
+        let md = SongMetaData::parse_file(&mp3_with_art())?;
+        dbg!(&md);
+        assert!(md.has_embedded_album_art);
+        assert!(md.title == Some("mp3 with art".to_string()));
+        assert!(md.bitrate_kbps == 169);
         assert!(does_file_have_embedded_artwork(&mp3_with_art())?);
         Ok(())
     }
 
     #[test]
-    fn does_file_have_cover_art_mp3_no() -> miette::Result<()> {
+    fn metadata_mp3_without_art() -> miette::Result<()> {
         assert!(!does_file_have_embedded_artwork(&mp3_without_art())?);
         Ok(())
     }
@@ -244,8 +316,6 @@ mod tests {
         external_art_to_embed: Option<PathBuf>,
     ) -> miette::Result<()> {
         use super::transcode_song;
-        // Technically there will be a VERY small chance the strings are identical.. lets just hope
-        // that doesn't happen.
         let random_string = random_string::generate(16, "abcdefghijklmnopqrstuvwxyz");
         let target: PathBuf = format!("/tmp/transcode_test_{}.mp3", random_string).into();
         println!("Using {}", target.display());

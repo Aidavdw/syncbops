@@ -13,6 +13,7 @@ miette = { version = "7.5.0", features = ["fancy"] }
 random-string = "1.1.0"
 rapidhash = "1.4.0"
 rayon = "1.10.0"
+regex = "1.11.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 thiserror = "2.0.11"
