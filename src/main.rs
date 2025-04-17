@@ -12,7 +12,7 @@ use music_library::{
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
@@ -160,16 +160,17 @@ fn main() -> miette::Result<()> {
         save_record_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
     }
 
+    // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
+    // the target directory, check if the same filename -prefix exists in the source dir, otherwise
+    // delete it. can re-use find_albums_in_directory()
+
     try_write_records(&previous_sync_db, &target_library);
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
+    print_library_size_reduction(&source_library, &target_library);
 
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
-
-    // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
-    // the target directory, check if the same filename -prefix exists in the source dir, otherwise
-    // delete it. can re-use find_albums_in_directory()
 }
 
 fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: bool) -> String {
@@ -232,6 +233,18 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     }
 
     summary
+}
 
+fn print_library_size_reduction(source_library: &Path, target_library: &Path) {
     // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"
+    use fs_extra::dir::get_size;
+    let source_lib_size = get_size(source_library).unwrap();
+    let target_lib_size = get_size(target_library).unwrap();
+    let percentage_reduction = (target_lib_size) as f64 / source_lib_size as f64 * 100.;
+    println!(
+        "Reduced library from {} MB to {} MB ({:.2}%)",
+        source_lib_size / 1_000_000,
+        target_lib_size / 1_000_000,
+        percentage_reduction
+    )
 }
