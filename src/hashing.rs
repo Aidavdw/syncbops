@@ -165,11 +165,27 @@ fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool
     true
 }
 
-pub fn save_to_previous_sync_db(previous_sync_db: &mut PreviousSyncDb, sync_record: SyncRecord) {
-    let add_new = previous_sync_db.insert(sync_record.library_relative_path.clone(), sync_record);
-    if add_new.is_none() {
-        eprintln!("Could not register song to previous sync db. Maybe it already exists?");
-    };
+pub fn save_record_to_previous_sync_db(
+    previous_sync_db: &mut PreviousSyncDb,
+    sync_record: SyncRecord,
+) {
+    let update_type = sync_record
+        .update_type
+        .expect("update type should be set already.");
+
+    // "file was not modified" is not very useful information
+    // knowing when it was last added and when it was last modified is much
+    // more useful information.
+    // Therefore, only write information if it is actually useful.
+    use UpdateType as U;
+    match update_type {
+        U::Unchanged => return,
+        U::New => (),
+        U::Overwritten => (),
+        U::ForcefullyOverwritten => (),
+    }
+    // Returned value is old value, don't need it anymore.
+    let _ = previous_sync_db.insert(sync_record.library_relative_path.clone(), sync_record);
 }
 
 pub fn hash_file(path: &Path) -> Option<u64> {

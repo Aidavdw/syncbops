@@ -3,7 +3,7 @@ mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
-use hashing::{save_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
+use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
 use indicatif::ParallelProgressIterator;
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
@@ -77,7 +77,7 @@ fn main() -> miette::Result<()> {
         }
     }
 
-    // If the target dir coes not exist, warn the user that it does not exist. Don't just
+    // If the target dir does not exist, warn the user that it does not exist. Don't just
     // willy-nilly create it, because they could've made a typo.
     if !target_library.is_dir() {
         return Err(MusicLibraryError::TargetLibraryDoesNotExist {
@@ -118,7 +118,7 @@ fn main() -> miette::Result<()> {
         })
         .collect::<SyncResults>();
 
-    // Might be sorted differently because of parallel execution, so put in order again.
+    // Might be sorted differently because of parallel execution, so put in alphabetic order again.
     let sync_results = {
         let mut unsorted = sync_results;
         unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
@@ -138,6 +138,7 @@ fn main() -> miette::Result<()> {
         .filter_map(|o| o.to_owned())
         .collect::<Vec<_>>();
 
+    // Update the PreviousSyncDB with the newly added items.
     for (_song, update_result) in &sync_results {
         let Ok(record) = update_result else {
             // Can't update syncdb if it errored.
@@ -147,7 +148,7 @@ fn main() -> miette::Result<()> {
         // NOTE: If miette could work with references, I could instead do printing a summary first,
         // and then owned move the records into the db.
         // Not the case, so a .clone() is necessary here.
-        save_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
+        save_record_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
     }
 
     try_write_records(&previous_sync_db, &target_library);
