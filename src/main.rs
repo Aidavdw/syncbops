@@ -88,16 +88,15 @@ fn main() -> miette::Result<()> {
 
     let art_strategy = cli.art_strategy;
 
+    // Load the results from the last hash
+    let mut previous_sync_db = try_read_records(&target_library);
+
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
     println!("Synchronising music files...");
     if cli.force {
         println!("Forced re-writing every music file.")
     }
-
-    // Load the results from the last hash
-    let mut previous_sync_db = try_read_records(&target_library);
-
     let sync_results: SyncResults = songs
         .par_iter()
         .progress()
@@ -208,6 +207,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     summary.push_str(&format!("Unchanged: {}\n", n_unchanged));
     summary.push_str(&format!("New songs: {}\n", n_new));
     summary.push_str(&format!("Changed songs (overwritten): {}\n", n_overwritten));
+    summary.push_str(&format!("Re-added missing: {}\n", n_missing_target));
     summary.push_str(&format!("New album art: {}\n", new_cover_arts.len()));
     if n_err == 0 {
         summary.push_str("No Errors :D\n");
