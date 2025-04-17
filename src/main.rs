@@ -171,6 +171,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     let mut n_new = 0;
     let mut n_overwritten = 0;
     let mut n_err = 0;
+    let mut n_missing_target = 0;
     let mut error_messages = if verbose {
         String::with_capacity(50000)
     } else {
@@ -188,6 +189,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     UpdateType::New => n_new += 1,
                     UpdateType::Overwritten => n_overwritten += 1,
                     UpdateType::ForcefullyOverwritten => n_overwritten += 1,
+                    UpdateType::MissingTarget => n_missing_target += 1,
                 };
                 song_updates.push_str(&format!("{} →  [{:?}]\n", song.path.display(), update_type))
             }

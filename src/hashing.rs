@@ -177,12 +177,8 @@ pub fn save_record_to_previous_sync_db(
     // knowing when it was last added and when it was last modified is much
     // more useful information.
     // Therefore, only write information if it is actually useful.
-    use UpdateType as U;
-    match update_type {
-        U::Unchanged => return,
-        U::New => (),
-        U::Overwritten => (),
-        U::ForcefullyOverwritten => (),
+    if update_type == UpdateType::Unchanged {
+        return;
     }
     // Returned value is old value, don't need it anymore.
     let _ = previous_sync_db.insert(sync_record.library_relative_path.clone(), sync_record);

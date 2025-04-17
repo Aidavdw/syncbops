@@ -23,6 +23,9 @@ pub enum UpdateType {
     Overwritten,
     /// Actually unchanged, but forced into being overwritten.
     ForcefullyOverwritten,
+    /// The song is present in the SyncDB (It has been synced before),
+    /// but the target file is no longer there
+    MissingTarget,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -290,11 +293,7 @@ pub fn sync_song(
     // If the file is in the previous_sync_db, but is not actually present,
     // consider it a missing file.
     let status = if !shadow.exists() && !matches!(status, U::New) {
-        eprintln!(
-            "{} has been synced previously, but its file is missing. Considering it a 'new' file.",
-            library_relative_path.display()
-        );
-        U::New
+        U::MissingTarget
     } else {
         status
     };
