@@ -4,10 +4,11 @@ mod music_library;
 mod song;
 use clap::{arg, Parser};
 use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
-use indicatif::ParallelProgressIterator;
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
-    songs_without_album_art, sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
+    library_relative_path, songs_without_album_art, sync_song, ArtStrategy, MusicFileType,
+    MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -97,10 +98,21 @@ fn main() -> miette::Result<()> {
     if cli.force {
         println!("Forced re-writing every music file.")
     }
+    let pb = ProgressBar::new(songs.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed}] [{bar:60.cyan/blue}] {pos}/{len} [ETA: {eta}] {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
     let sync_results: SyncResults = songs
         .par_iter()
-        .progress()
+        .progress_with(pb.clone())
+        // This leaves the progress bar
+        .with_message("Synchronised music files.")
         .map(|song| {
+            let rel_path = library_relative_path(&song.path, &source_library);
+            pb.set_message(format!("{}", rel_path.display()));
             (
                 song,
                 sync_song(
