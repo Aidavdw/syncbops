@@ -108,8 +108,6 @@ fn main() -> miette::Result<()> {
     let sync_results: SyncResults = songs
         .par_iter()
         .progress_with(pb.clone())
-        // This leaves the progress bar
-        .with_message("Synchronised music files.")
         .map(|song| {
             let rel_path = library_relative_path(&song.path, &source_library);
             pb.set_message(format!("{}", rel_path.display()));

@@ -5,7 +5,10 @@ use crate::hashing::hash_file;
 use crate::hashing::PreviousSyncDb;
 use crate::hashing::SyncRecord;
 use crate::song::Song;
+use indicatif::ParallelProgressIterator;
+use indicatif::ProgressBar;
 use indicatif::ProgressIterator;
+use indicatif::ProgressStyle;
 use itertools::Itertools;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -234,10 +237,21 @@ pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
 }
 
 pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
-    // TODO: Add progress bar here
+    let pb = ProgressBar::new(songs.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed}] [{bar:60.cyan/blue}] {pos}/{len} [ETA: {eta}] {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
     let yee = songs
         .par_iter()
-        .filter(|song| song.has_artwork() == ArtworkType::None)
+        .progress_with(pb.clone())
+        .with_finish(indicatif::ProgressFinish::AndLeave)
+        .filter(|song| {
+            pb.set_message(format!("{}", song.path.display()));
+            song.has_artwork() == ArtworkType::None
+        })
         .collect::<Vec<_>>();
     yee
 }
