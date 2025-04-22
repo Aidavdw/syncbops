@@ -1,11 +1,11 @@
+use crate::music_library::MusicFileType;
 use itertools::Itertools;
 use regex::Regex;
+use serde_json::Value as JsonValue;
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-
-use crate::music_library::MusicFileType;
 
 /// Queries `ffprobe "<filename>" 2>&1 | grep "Cover"`.
 pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
@@ -41,8 +41,16 @@ impl SongMetaData {
 }
 
 fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
+    // Try to run `ffprobe -loglevel 0 -print_format json -show_format -show_streams <path>`
     let mut binding = Command::new("ffprobe");
-    binding.arg(path);
+    binding
+        .arg("-loglevel")
+        .arg("0")
+        .arg("-print_format")
+        .arg("json")
+        .arg("-show_format")
+        .arg("-show_streams")
+        .arg(path);
     let ffprobe = binding
         .output()
         .map_err(|e| FfmpegError::CheckForAlbumArtCommand {
@@ -52,31 +60,37 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
                 .map(|osstr| osstr.to_string_lossy())
                 .join(" "),
         })?;
-    let txt = String::from_utf8(ffprobe.stderr).unwrap();
+    let ffprobe_json_output = String::from_utf8(ffprobe.stdout).unwrap();
+    let parsed: JsonValue =
+        serde_json::from_str(&ffprobe_json_output).map_err(|_| FfmpegError::JsonMetadata)?;
 
-    // Regex patterns to match the title, bitrate, and check for streams
-    let metadata_re = Regex::new(r"(?s)Metadata:\n(?P<meta>(?:\s{4,}.+\n)+)").unwrap();
-    let title_re = Regex::new(r"^\s{4,}title\s*:\s*(?P<title>.+)$").unwrap();
-    let bitrate_re = Regex::new(r"Stream #\d+:\d+: Audio:.*?, (?P<bitrate>\d+)\s*kb/s").unwrap();
-    let has_video_re = Regex::new(r"Stream #\d+:\d+: Video:.*\(attached pic\)").unwrap();
+    // The first stream must be the audio.
+    let audio_stream: &JsonValue = &parsed["streams"][0];
 
-    // 1. Extract the title from the global metadata block
-    let title = metadata_re.captures(&txt).and_then(|cap| {
-        cap["meta"].lines().find_map(|line| {
-            title_re
-                .captures(line)
-                .map(|m| m["title"].trim().to_string())
-        })
-    });
+    let JsonValue::String(first_stream) = &audio_stream["codec_type"] else {
+        return Err(FfmpegError::JsonMetadata);
+    };
+    assert!(first_stream == "audio");
 
-    // 2. Extract audio bitrate
-    let bitrate_kbps = bitrate_re
-        .captures(&txt)
-        .and_then(|cap| cap.name("bitrate"))
-        .and_then(|m| m.as_str().parse().ok());
+    // If it is given as a string, turn it into a number.
+    let bitrate_kbps = match &audio_stream["bit_rate"] {
+        JsonValue::Number(x) => x.as_u64().map(|a| a as u32),
+        JsonValue::String(s) => s.parse::<u32>().ok(),
+        _ => None,
+    }
+    .map(|bits_per_second| bits_per_second / 1000);
 
-    // 3. Check for embedded album art (presence of video stream with "attached pic")
-    let has_embedded_album_art = has_video_re.is_match(&txt);
+    // Extract the title from the global metadata block
+    let title = parsed["format"]["tags"]["title"]
+        .as_str()
+        .or_else(|| parsed["format"]["tags"]["TITLE"].as_str())
+        .or_else(|| todo!("Try with other keys"))
+        .map(|s| s.to_owned());
+
+    // To check if the thing has album art, just check if there is a video stream.
+    let video_stream: &JsonValue = &parsed["streams"][1];
+    let has_embedded_album_art = !video_stream.is_null();
+    // debug_assert!(video_stream["codec_type"].as_str().unwrap() == "video")
 
     Ok(SongMetaData {
         title,
@@ -192,6 +206,9 @@ pub enum FfmpegError {
 
     #[error("Could not determine the bitrate for file `{path}`")]
     Bitrate { path: String },
+
+    #[error("Could not parse json metadata output from ffprobe.")]
+    JsonMetadata,
 }
 
 #[cfg(test)]
@@ -289,7 +306,7 @@ mod tests {
         let md = SongMetaData::parse_file(&flac_without_art())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
-        assert!(md.title == Some("flac without art".to_string()));
+        assert!(md.title == Some("Flac without art".to_string()));
         assert!(md.bitrate_kbps.is_none());
         Ok(())
     }
