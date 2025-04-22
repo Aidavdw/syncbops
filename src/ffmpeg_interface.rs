@@ -30,7 +30,7 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
 #[derive(Debug)]
 pub struct SongMetaData {
     title: Option<String>,
-    bitrate_kbps: u32,
+    bitrate_kbps: Option<u32>,
     has_embedded_album_art: bool,
 }
 
@@ -70,13 +70,10 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     });
 
     // 2. Extract audio bitrate
-    let bitrate_kbps: u32 = bitrate_re
+    let bitrate_kbps = bitrate_re
         .captures(&txt)
         .and_then(|cap| cap.name("bitrate"))
-        .and_then(|m| m.as_str().parse().ok())
-        .ok_or_else(|| FfmpegError::Bitrate {
-            path: "Failed to find audio bitrate".to_string(),
-        })?;
+        .and_then(|m| m.as_str().parse().ok());
 
     // 3. Check for embedded album art (presence of video stream with "attached pic")
     let has_embedded_album_art = has_video_re.is_match(&txt);
@@ -263,26 +260,37 @@ mod tests {
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("mp3 with art".to_string()));
-        assert!(md.bitrate_kbps == 169);
-        assert!(does_file_have_embedded_artwork(&mp3_with_art())?);
+        assert!(md.bitrate_kbps == Some(169));
         Ok(())
     }
 
     #[test]
     fn metadata_mp3_without_art() -> miette::Result<()> {
-        assert!(!does_file_have_embedded_artwork(&mp3_without_art())?);
+        let md = SongMetaData::parse_file(&mp3_without_art())?;
+        dbg!(&md);
+        assert!(!md.has_embedded_album_art);
+        assert!(md.title == Some("mp3 without art".to_string()));
+        assert!(md.bitrate_kbps == Some(180));
         Ok(())
     }
 
     #[test]
-    fn does_file_have_cover_art_flac_yes() -> miette::Result<()> {
-        assert!(does_file_have_embedded_artwork(&flac_with_art())?);
+    fn metadata_flac_with_art() -> miette::Result<()> {
+        let md = SongMetaData::parse_file(&flac_with_art())?;
+        dbg!(&md);
+        assert!(md.has_embedded_album_art);
+        assert!(md.title == Some("flac with art".to_string()));
+        assert!(md.bitrate_kbps.is_none());
         Ok(())
     }
 
     #[test]
     fn does_file_have_cover_art_flac_no() -> miette::Result<()> {
-        assert!(!does_file_have_embedded_artwork(&flac_without_art())?);
+        let md = SongMetaData::parse_file(&flac_without_art())?;
+        dbg!(&md);
+        assert!(!md.has_embedded_album_art);
+        assert!(md.title == Some("flac without art".to_string()));
+        assert!(md.bitrate_kbps.is_none());
         Ok(())
     }
 
