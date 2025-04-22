@@ -236,7 +236,6 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
 }
 
 fn print_library_size_reduction(source_library: &Path, target_library: &Path) {
-    // TODO: Give a little message of "input folder was n gig, output is n gig. space saved: n %"
     use fs_extra::dir::get_size;
     let source_lib_size = get_size(source_library).unwrap();
     let target_lib_size = get_size(target_library).unwrap();

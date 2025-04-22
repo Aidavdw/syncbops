@@ -151,9 +151,6 @@ fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool
             eprintln!(
                 "Cannot open {} for writing records: {}. No previous sync data will be saved. This probably means your next sync will unnecessarily redo a lot of things :(", path.display(), e
             );
-            // TODO: See if we can write to an alt name, to the user's home directory, or to
-            // the current directory. and warn the user of it.
-            // Just call this same function again, but now with a different target file.
             return false;
         }
     };
