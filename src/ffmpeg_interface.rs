@@ -8,7 +8,7 @@ use std::{
 
 /// Gets stuff like title, artist name, etc.
 /// Also, whether the song has album art.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SongMetaData {
     pub title: Option<String>,
     pub bitrate_kbps: u32,

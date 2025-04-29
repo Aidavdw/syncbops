@@ -41,6 +41,7 @@ pub enum ArtworkType {
 
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum MusicFileType {
+    // TODO: Separate Mp3 constant bitrate and Mp3 variable bitrate.
     /// Transcode to Mp3. Very widely supported, but not very good.
     Mp3 {
         /// If `vbr` flag not active, the constant bitrate in kbps.
@@ -234,9 +235,12 @@ pub fn find_songs_in_directory_and_subdirectories(
     let songs = files_and_folders_in_dir
         .iter()
         .filter(|(_, filetype)| *filetype == FileType::Music)
-        .map(|(path, _)| Song {
-            path: path.clone(),
-            external_album_art: folder_art.clone(),
+        .filter_map(|(path, _)| {
+            // If there is an error with parsing this file to a song, then just ignore it, but do
+            // print why it failed.
+            Song::new(path.clone(), folder_art.clone())
+                .map_err(|e| eprintln!("{e}"))
+                .ok()
         });
     //
     let songs_in_this_dir_and_subdirs = songs.chain(songs_in_sub_directories).collect_vec();
@@ -615,10 +619,7 @@ mod tests {
     fn sync_song_artstrat_none_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_none/embedded",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: None,
-            },
+            Song::new(with_embedded_album_art(), None)?,
             ArtStrategy::None,
         )
     }
@@ -628,10 +629,7 @@ mod tests {
     fn sync_song_artstrat_none_external_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_none/external",
-            Song {
-                path: without_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(without_art(), external_art())?,
             ArtStrategy::None,
         )
     }
@@ -641,10 +639,7 @@ mod tests {
     fn sync_song_artstrat_none_no_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_none/no-art",
-            Song {
-                path: without_art(),
-                external_album_art: None,
-            },
+            Song::new(without_art(), None)?,
             ArtStrategy::None,
         )
     }
@@ -654,10 +649,7 @@ mod tests {
     fn sync_song_artstrat_none_both() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_none/both",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(with_embedded_album_art(), external_art())?,
             ArtStrategy::None,
         )
     }
@@ -670,10 +662,7 @@ mod tests {
     fn sync_song_artstrat_embed_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_embed/embedded",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: None,
-            },
+            Song::new(with_embedded_album_art(), None)?,
             ArtStrategy::EmbedAll,
         )
     }
@@ -683,10 +672,7 @@ mod tests {
     fn sync_song_artstrat_embed_external_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_embed/external",
-            Song {
-                path: without_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(without_art(), external_art())?,
             ArtStrategy::EmbedAll,
         )
     }
@@ -696,10 +682,7 @@ mod tests {
     fn sync_song_artstrat_embed_no_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_embed/no-art",
-            Song {
-                path: without_art(),
-                external_album_art: None,
-            },
+            Song::new(without_art(), None)?,
             ArtStrategy::EmbedAll,
         )
     }
@@ -709,10 +692,7 @@ mod tests {
     fn sync_song_artstrat_embed_both() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_embed/both",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(with_embedded_album_art(), external_art())?,
             ArtStrategy::EmbedAll,
         )
     }
@@ -725,10 +705,7 @@ mod tests {
     fn sync_song_artstrat_prefer_file_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_prefer_file/embedded",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: None,
-            },
+            Song::new(with_embedded_album_art(), None)?,
             ArtStrategy::PreferFile,
         )
     }
@@ -738,10 +715,7 @@ mod tests {
     fn sync_song_artstrat_prefer_file_external_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_prefer_file/external",
-            Song {
-                path: without_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(without_art(), external_art())?,
             ArtStrategy::PreferFile,
         )
     }
@@ -751,10 +725,7 @@ mod tests {
     fn sync_song_artstrat_prefer_file_no_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_prefer_file/no-art",
-            Song {
-                path: without_art(),
-                external_album_art: None,
-            },
+            Song::new(without_art(), None)?,
             ArtStrategy::PreferFile,
         )
     }
@@ -764,10 +735,7 @@ mod tests {
     fn sync_song_artstrat_prefer_file_both() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_prefer_file/both",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(with_embedded_album_art(), external_art())?,
             ArtStrategy::PreferFile,
         )
     }
@@ -780,10 +748,7 @@ mod tests {
     fn sync_song_artstrat_file_only_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_file_only/embedded",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: None,
-            },
+            Song::new(with_embedded_album_art(), None)?,
             ArtStrategy::FileOnly,
         )
     }
@@ -793,10 +758,7 @@ mod tests {
     fn sync_song_artstrat_file_only_external_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_file_only/external",
-            Song {
-                path: without_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(without_art(), external_art())?,
             ArtStrategy::FileOnly,
         )
     }
@@ -806,10 +768,7 @@ mod tests {
     fn sync_song_artstrat_file_only_no_art() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_file_only/no-art",
-            Song {
-                path: without_art(),
-                external_album_art: None,
-            },
+            Song::new(without_art(), None)?,
             ArtStrategy::FileOnly,
         )
     }
@@ -819,10 +778,7 @@ mod tests {
     fn sync_song_artstrat_file_only_both() -> miette::Result<()> {
         sync_new_song_test(
             "artstrat_file_only/both",
-            Song {
-                path: with_embedded_album_art(),
-                external_album_art: external_art(),
-            },
+            Song::new(with_embedded_album_art(), external_art())?,
             ArtStrategy::FileOnly,
         )
     }
@@ -830,18 +786,17 @@ mod tests {
     // END ART STRATEGY = FILE_ONLY
 
     fn mock_song(embedded_art: bool, external_album_art: bool) -> Song {
-        Song {
-            path: if embedded_art {
-                with_embedded_album_art()
-            } else {
-                without_art()
-            },
-            external_album_art: if external_album_art {
-                external_art()
-            } else {
-                None
-            },
-        }
+        let path = if embedded_art {
+            with_embedded_album_art()
+        } else {
+            without_art()
+        };
+        let external_album_art = if external_album_art {
+            external_art()
+        } else {
+            None
+        };
+        Song::new(path, external_album_art).unwrap()
     }
 
     #[test]
