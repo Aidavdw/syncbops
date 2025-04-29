@@ -22,6 +22,12 @@ impl SongMetaData {
 }
 
 fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
+    if !path.exists() {
+        return Err(FfmpegError::FileDoesNotExist {
+            path: path.to_str().unwrap().to_owned(),
+        });
+    }
+
     // Try to run `ffprobe -loglevel 0 -print_format json -show_format -show_streams <path>`
     let mut binding = Command::new("ffprobe");
     binding
@@ -251,6 +257,9 @@ pub enum FfmpegError {
 
     #[error("Could not parse json metadata output from ffprobe.")]
     JsonMetadata,
+
+    #[error("Could not run FFmpeg on {path}, because it does not exist.")]
+    FileDoesNotExist { path: String },
 }
 
 #[cfg(test)]

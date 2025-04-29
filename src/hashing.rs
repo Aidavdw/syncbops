@@ -1,3 +1,4 @@
+use crate::{music_library::UpdateType, song::Song};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -5,11 +6,6 @@ use std::{
     io::BufReader,
     path::{Path, PathBuf},
     time::SystemTime,
-};
-
-use crate::{
-    music_library::{library_relative_path, UpdateType},
-    song::Song,
 };
 
 /// Data about how a file is at a certain point in time. By comparing SyncRecords, you can see
@@ -45,21 +41,21 @@ impl SyncRecord {
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
 
 /// Tries to read the previous sync db into one of the possible locations
-pub fn try_read_records(target_library: &Path) -> PreviousSyncDb {
+pub fn try_read_records(target_library: &Path) -> Option<PreviousSyncDb> {
     let file_candidates = generate_potential_locations_for_database_file(target_library);
     for file in file_candidates {
         match load_previous_sync(&file) {
             Some(x) => {
                 println!("Read records from {}", file.display());
-                return x;
+                return Some(x);
             }
             None => {
                 continue;
             }
         }
     }
-    println!("Could not open any records. Assuming there is no previous sync data.");
-    PreviousSyncDb::new()
+    println!("Could not find any records of previous syncs.");
+    None
 }
 
 fn load_previous_sync(path: &Path) -> Option<PreviousSyncDb> {

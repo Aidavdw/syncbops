@@ -3,7 +3,10 @@ mod hashing;
 mod music_library;
 mod song;
 use clap::{arg, Parser};
-use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
+use hashing::{
+    save_record_to_previous_sync_db, try_read_records, try_write_records, PreviousSyncDb,
+    SyncRecord,
+};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_source_library, songs_without_album_art,
@@ -51,6 +54,12 @@ struct Cli {
     /// Maximum amount of threads to use. If no value given, will use all threads.
     #[arg(short, long)]
     thread_count: Option<usize>,
+
+    /// Whether or not a record of the synchronisation will be written to the target library.
+    /// If this is done, then future synchronising runs can be performed much faster, as file
+    /// changes can be checked based on hashes.
+    #[arg(short, long, default_value_t = false)]
+    save_records: bool,
 }
 
 fn main() -> miette::Result<()> {
@@ -99,8 +108,8 @@ fn main() -> miette::Result<()> {
 
     let art_strategy = cli.art_strategy;
 
-    // Load the results from the last hash
-    let mut previous_sync_db = try_read_records(&target_library);
+    // Load the results from the last hash.
+    let previous_sync_db = try_read_records(&target_library);
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
@@ -127,7 +136,7 @@ fn main() -> miette::Result<()> {
                     &target_library,
                     cli.target_filetype.clone(),
                     art_strategy,
-                    &previous_sync_db,
+                    previous_sync_db.as_ref(),
                     cli.force,
                     cli.dry_run,
                 ),
@@ -156,23 +165,27 @@ fn main() -> miette::Result<()> {
         .collect::<Vec<_>>();
 
     // Update the PreviousSyncDB with the newly added items.
-    for (_song, update_result) in &sync_results {
-        let Ok(record) = update_result else {
-            // Can't update syncdb if it errored.
-            continue;
-        };
-        debug_assert!(record.update_type.is_some());
-        // NOTE: If miette could work with references, I could instead do printing a summary first,
-        // and then owned move the records into the db.
-        // Not the case, so a .clone() is necessary here.
-        save_record_to_previous_sync_db(&mut previous_sync_db, record.to_owned())
+    if cli.save_records {
+        // Carry over any previous records (files that are not touched retain their original data).
+        let mut new_records = previous_sync_db.unwrap_or_default();
+
+        for (_song, update_result) in &sync_results {
+            let Ok(record) = update_result else {
+                // Can't update syncdb if it errored.
+                continue;
+            };
+            debug_assert!(record.update_type.is_some());
+            // NOTE: If miette could work with references, I could instead do printing a summary first,
+            // and then owned move the records into the db.
+            // Not the case, so a .clone() is necessary here.
+            save_record_to_previous_sync_db(&mut new_records, record.to_owned())
+        }
+        // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
+        // the target directory, check if the same filename -prefix exists in the source dir, otherwise
+        // delete it. can re-use find_albums_in_directory()
+        try_write_records(&new_records, &target_library);
     }
 
-    // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
-    // the target directory, check if the same filename -prefix exists in the source dir, otherwise
-    // delete it. can re-use find_albums_in_directory()
-
-    try_write_records(&previous_sync_db, &target_library);
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
     print_library_size_reduction(&source_library, &target_library);
 

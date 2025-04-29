@@ -277,9 +277,14 @@ pub fn has_music_file_changed(
                 }
             }
             Err(e) => {
-                // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
-                eprintln!("Could not read metadata from shadow file: {e}. Overwriting it.");
-                U::Overwritten
+                if matches!(e, FfmpegError::FileDoesNotExist { .. }) {
+                    // False alarm. Just consider it as new.
+                    U::New
+                } else {
+                    // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
+                    eprintln!("Could not read metadata from shadow file, so overwriting it: {e}");
+                    U::Overwritten
+                }
             }
         }
     }
@@ -375,7 +380,7 @@ pub fn sync_song(
     target_library: &Path,
     target_filetype: MusicFileType,
     art_strategy: ArtStrategy,
-    previous_sync_db: &PreviousSyncDb,
+    previous_sync_db: Option<&PreviousSyncDb>,
     force: bool,
     dry_run: bool,
 ) -> Result<SyncRecord, MusicLibraryError> {
@@ -386,7 +391,7 @@ pub fn sync_song(
         target_library,
         &target_filetype,
     );
-    let status = has_music_file_changed(song, &shadow, Some(previous_sync_db));
+    let status = has_music_file_changed(song, &shadow, previous_sync_db);
     let new_sync_record = SyncRecord::from_song(song);
 
     // Early exit if unchanged.
@@ -597,15 +602,13 @@ mod tests {
         let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
         assert!(!target.exists());
-        // Should be a new file, so no previous entries of it either.
-        let previous_sync_db = PreviousSyncDb::default();
 
         let updated_record = sync_song(
             &song,
             &target_library,
             target_filetype,
             art_strategy,
-            &previous_sync_db,
+            None,
             false,
             false,
         )?;
