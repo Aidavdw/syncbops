@@ -40,16 +40,16 @@ pub enum ArtworkType {
 
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum MusicFileType {
-    // TODO: Separate Mp3 constant bitrate and Mp3 variable bitrate.
-    /// Transcode to Mp3. Very widely supported, but not very good.
-    Mp3 {
-        /// If `vbr` flag not active, the constant bitrate in kbps.
+    /// Constant bitrate MP3. Very widely supported, not very good.
+    Mp3CBR {
+        /// The constant bitrate in kbps
         #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
-        constant_bitrate: u64,
-        /// use variable bitrate encoding. the 'bitrate' arbument will be ignored, and the 'quality' argument used instead. Default true
-        #[arg(short, long, default_value_t = true)]
-        vbr: bool,
-        /// If vbr flag is set, quality factor. From 0 to 9. See https://trac.ffmpeg.org/wiki/Encode/MP3
+        bitrate: u64,
+    },
+    /// Variable bitrate MP3. A decent bit smaller than MP3 CBR, usually at negligible qualtiy
+    /// degredation.
+    Mp3VBR {
+        /// quality factor. From 0 to 9. Lower is higher quality, but larger filesize. See https://trac.ffmpeg.org/wiki/Encode/MP3
         #[arg(short, long, default_value_t = 3)]
         quality: usize,
     },
@@ -106,7 +106,8 @@ impl Display for MusicFileType {
             f,
             "{}",
             match self {
-                MusicFileType::Mp3 { .. } => "mp3",
+                MusicFileType::Mp3VBR { .. } => "mp3",
+                MusicFileType::Mp3CBR { .. } => "mp3",
                 MusicFileType::Opus { .. } => "opus",
                 MusicFileType::Vorbis { .. } => "ogg",
                 MusicFileType::Flac { .. } => "flac",
@@ -593,11 +594,7 @@ mod tests {
         let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
-        let target_filetype = MusicFileType::Mp3 {
-            constant_bitrate: 0,
-            vbr: true,
-            quality: 3,
-        };
+        let target_filetype = MusicFileType::Mp3VBR { quality: 3 };
         let library_relative_path = library_relative_path(&song.absolute_path, &source_library);
         let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);

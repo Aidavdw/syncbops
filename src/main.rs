@@ -69,7 +69,8 @@ fn main() -> miette::Result<()> {
 
     // TODO: Validate if e.g. FLAC level is between 0 and 12, otherwise return error.
     match cli.target_filetype {
-        MusicFileType::Mp3 { .. } => (),
+        MusicFileType::Mp3VBR { .. } => (),
+        MusicFileType::Mp3CBR { .. } => (),
         _ => return Err(MusicLibraryError::OutputCodecNotYetImplemented.into()),
     }
 

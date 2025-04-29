@@ -132,22 +132,19 @@ pub fn transcode_song(
 
     binding.arg("-codec:a");
 
+    use MusicFileType as M;
     match target_type {
-        MusicFileType::Mp3 {
-            constant_bitrate,
-            vbr,
-            quality,
-        } => {
+        M::Mp3VBR { quality } => {
             binding.arg("libmp3lame");
-            if vbr {
-                // Specific for vbr: quality scale of the audio track, instead of the bitrate.
-                // should be between 0 and 9. See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
-                binding.arg("-q:a").arg(quality.to_string());
-            } else {
-                // Constant bitrate in kbps.
-                // See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
-                binding.arg("-b:a").arg(format!("{}k", constant_bitrate));
-            }
+            // Specific for vbr: quality scale of the audio track, instead of the bitrate.
+            // should be between 0 and 9. See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
+            binding.arg("-q:a").arg(quality.to_string());
+        }
+        M::Mp3CBR { bitrate } => {
+            binding.arg("libmp3lame");
+            // Constant bitrate in kbps.
+            // See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
+            binding.arg("-b:a").arg(format!("{}k", bitrate));
         }
         _ => panic!("MusicFileType not yet implemented as a target."),
     }
@@ -163,7 +160,11 @@ pub fn transcode_song(
 
     // More metadata mapping operations:
     match target_type {
-        MusicFileType::Mp3 { .. } => {
+        MusicFileType::Mp3VBR { .. } => {
+            // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
+            binding.arg("-id3v2_version").arg("3")
+        }
+        MusicFileType::Mp3CBR { .. } => {
             // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
             binding.arg("-id3v2_version").arg("3")
         }
@@ -421,11 +422,7 @@ mod tests {
         transcode_song(
             &source,
             &target,
-            MusicFileType::Mp3 {
-                constant_bitrate: 0,
-                vbr: true,
-                quality: 3,
-            },
+            MusicFileType::Mp3VBR { quality: 3 },
             embed_art,
             external_art_to_embed.as_deref(),
         )?;
