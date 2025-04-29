@@ -9,6 +9,7 @@ pub struct Song {
     /// Where the original song file can be found
     pub path: PathBuf,
 
+    // TODO: Also cache the library relative path, because it is used a lot.
     /// Where the external album art is, if it exists.
     pub external_album_art: Option<PathBuf>,
 

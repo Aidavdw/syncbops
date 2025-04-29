@@ -250,17 +250,60 @@ pub fn find_songs_in_directory_and_subdirectories(
 
 /// Checks if the source music file has been changed since it has been transcoded.
 /// TODO: Revert this to its original purpose: checking if the dates are different.
-pub fn has_music_file_changed(source: &Path, target: &Path) -> bool {
-    let Some(source_hash) = hash_file(source) else {
-        // If you can't determine a hash, no way to know if it has changed, so do it again.
-        return true;
-    };
-    let Some(target_hash) = hash_file(target) else {
-        // If you can't determine a hash, no way to know if it has changed, so do it again.
-        return true;
-    };
+pub fn has_music_file_changed(
+    source_library: &Path,
+    source: &Song,
+    target: &Path,
+    previous_sync_db: Option<&PreviousSyncDb>,
+) -> UpdateType {
+    use UpdateType as U;
+    fn compare_metadata(source: &Song, target: &Path) -> UpdateType {
+        match SongMetaData::parse_file(target) {
+            Ok(shadow_metadata) => {
+                if source.metadata == shadow_metadata {
+                    U::Unchanged
+                } else {
+                    U::Overwritten
+                }
+            }
+            Err(e) => {
+                // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
+                eprintln!("Could not read metadata from shadow file: {e}. Overwriting it.");
+                U::Overwritten
+            }
+        }
+    }
 
-    source_hash != target_hash
+    let Some(source_hash) = hash_file(&source.path) else {
+        // If you can't determine a hash,there is no way of knowing whether or not the file has
+        // changed.
+        return compare_metadata(source, target);
+    };
+    // If a previous_sync_db is given, then we can use that to check if the hash is the same.
+    if let Some(db) = previous_sync_db {
+        let library_relative_path = library_relative_path(&source.path, source_library);
+        if let Some(previous_record) = db.get(&library_relative_path) {
+            if let Some(hash_at_previous_sync) = previous_record.hash {
+                if hash_at_previous_sync == source_hash {
+                    return U::Unchanged;
+                } else {
+                    // The hashes are not the same. Hence, the file must have changed.
+                    return U::Overwritten;
+                }
+            }
+            // Didn't save a hash at previous sync.
+        };
+        // This file does not exist in the previous_sync db
+    };
+    // No previous_sync_db is available.
+    // Checking for a previous sync didn't work.
+    // TODO: Re-instate the small check here to see if the source file is newer than the
+    // destination file.
+
+    // We cannot just hash the target file, since it will be encoded differently.
+    // So, instead we can check if the metadata is the same, and if the album art has
+    // not changed.
+    compare_metadata(source, target)
 }
 
 pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
@@ -445,6 +488,9 @@ pub enum MusicLibraryError {
 
     #[error("This output filetype/encoding is not yet supported :(. Feel free to implement it and send a PR <3")]
     OutputCodecNotYetImplemented,
+
+    #[error("Could not hash the file {path}")]
+    CantHash { path: PathBuf },
 }
 
 #[cfg(test)]
@@ -487,36 +533,35 @@ mod tests {
     }
 
     /// Shared between all tests for has_music_file_changed
-    fn construct_has_music_file_changed(orig_name: &str, modified_name: &str) -> bool {
+    fn construct_has_music_file_changed(orig_name: &str, modified_name: &str) -> UpdateType {
         use super::has_music_file_changed as f;
         let mut original = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        original.push(format!("test_data/{}.mp3", orig_name));
-        let mut shadow = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        shadow.push(format!("test_data/{}.mp3", modified_name));
+        original.push("test_data/");
+        let source_library = original.clone();
+        let mut shadow = original.clone();
+        original.push(format!("{}.mp3", orig_name));
         assert!(
             original.exists(),
             "{} does not exist, so cannot test",
             original.display()
         );
+        let original_song = Song::new(original, None).unwrap();
+        shadow.push(format!("{}.mp3", modified_name));
         assert!(
             shadow.exists(),
             "{} does not exist, so cannot test.",
             shadow.display()
         );
-        let forward = f(&original, &shadow);
-        let backward = f(&original, &shadow);
-        assert!(
-            forward == backward,
-            "File changing checking should be bi-directional!"
-        );
-        forward
+
+        f(&source_library, &original_song, &shadow, None)
     }
 
     #[test]
     /// Calling it on the same file.
     fn has_music_file_changed_identical_file() {
-        assert!(
-            !construct_has_music_file_changed("no_art", "no_art"),
+        assert_eq!(
+            construct_has_music_file_changed("no_art", "no_art"),
+            UpdateType::Unchanged,
             "identical file, should say it has not changed"
         )
     }
@@ -525,7 +570,11 @@ mod tests {
     fn construct_should_have_changed(mod_suffix: &str) {
         let is_changed =
             construct_has_music_file_changed("no_art", &format!("no_art_changed_{}", mod_suffix));
-        assert!(is_changed, "Says file did not change, while it did!")
+        assert_eq!(
+            is_changed,
+            UpdateType::Overwritten,
+            "Says file did not change, while it did!"
+        )
     }
 
     #[test]
