@@ -108,12 +108,15 @@ pub fn transcode_song(
 ) -> Result<(), FfmpegError> {
     let mut binding = Command::new("ffmpeg");
     binding
-        .arg("-y") // Replace if it already exists
+        // Replace file if it already exists
+        .arg("-y")
+        // input url: the source file
         .arg("-i")
         .arg(source);
 
     if embed_art {
         if let Some(path) = external_art_to_embed {
+            // Second input url: the external album art.
             binding.arg("-i").arg(path);
         }
     }
@@ -132,30 +135,66 @@ pub fn transcode_song(
             // TODO: Write tags as ID3v2.3. Right now it is ID3v4, which is less broadly supported.
             binding.arg("libmp3lame");
             if vbr {
+                // Specific for vbr: quality scale of the audio track, instead of the bitrate.
+                // should be between 0 and 9. See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
                 binding.arg("-q:a").arg(quality.to_string());
             } else {
+                // Constant bitrate in kbps.
+                // See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
                 binding.arg("-b:a").arg(format!("{}k", constant_bitrate));
             }
         }
         _ => panic!("MusicFileType not yet implemented as a target."),
     }
 
+    // Take all the metadata from file 0 (source library music file).
+    // For both the global metadata (0) and the metadata of the first stream (0:s:0)
+    // This also handles conversion of metadata (e.g. from VORBIS comments) to ID3v2
+    binding
+        .arg("-map_metadata")
+        .arg("0")
+        .arg("-map_metadata")
+        .arg("0:s:0");
+
+    match target_type {
+        MusicFileType::Mp3 { .. } => binding.arg("-id3v2_version").arg("3"),
+        MusicFileType::Opus { .. } => todo!(),
+        MusicFileType::Vorbis { .. } => todo!(),
+        MusicFileType::Flac { .. } => todo!(),
+    };
+
+    // TODO: Downscale art if it is higher resolution than required. If the desired resolution is
+    // higher, then don't do any scaling.
+
     if external_art_to_embed.is_some() && embed_art {
+        // We have an external art to embed.
+        // TODO: Check if the external art is higher quality than the already embedded art. If it is,
+        // prefer using that, unless the resolution is already exactly the target resolution.
+
         // It becomes `ffmpeg -i input.wav -i cover.jpg -codec:a libmp3lame -qscale:a 2 -metadata:s:v title="Cover" -metadata:s:v comment="Cover" -map 0:a -map 1:v output.mp3`
         binding
+            // give the title "cover" to the inserted album art
             .arg("-metadata:s:v")
             .arg("title=\"Cover\"")
+            // give the comment "cover" to the inserted album art.
+            // Some music players look for comment instead of title.
             .arg("-metadata:s:v")
             .arg("comments=\"Cover\"")
+            // Use the first provided file (source library audio file) as the audio track
             .arg("-map")
             .arg("0:a")
+            // Use the second provided source (external album art) as the video track.
             .arg("-map")
             .arg("1:v");
     } else if !embed_art {
+        // -vn drops the video track
         binding.arg("-vn");
     }
 
     binding.arg(target);
+
+    // Check if there is any problem with the generated command. If this error occurs, it is
+    // most likely an implementation error
     let output = binding
         .output()
         .map_err(|e| FfmpegError::TranscodeCommand {
@@ -165,6 +204,7 @@ pub fn transcode_song(
                 .map(|osstr| osstr.to_string_lossy())
                 .join(" "),
         })?;
+    // Check if there was a problem with running ffmpeg.
     if !output.status.success() {
         let cmd_txt = binding
             .get_args()
