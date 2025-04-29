@@ -308,7 +308,7 @@ mod tests {
     }
 
     #[test]
-    fn does_file_have_cover_art_flac_no() -> miette::Result<()> {
+    fn metadata_flac_without_art() -> miette::Result<()> {
         let md = SongMetaData::parse_file(&flac_without_art())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn does_file_have_cover_art_ogg_yes() -> miette::Result<()> {
+    fn metadata_ogg_with_art() -> miette::Result<()> {
         let md = SongMetaData::parse_file(&ogg_with_art())?;
         dbg!(&md);
         assert!(md.has_embedded_album_art);
@@ -328,20 +328,32 @@ mod tests {
     }
 
     #[test]
-    fn does_file_have_cover_art_ogg_no() -> miette::Result<()> {
-        assert!(!does_file_have_embedded_artwork(&ogg_without_art())?);
+    fn metadata_ogg_without_art() -> miette::Result<()> {
+        let md = SongMetaData::parse_file(&ogg_without_art())?;
+        dbg!(&md);
+        assert!(!md.has_embedded_album_art);
+        assert!(md.title == Some("vorbis without art".to_string()));
+        assert!(md.bitrate_kbps == Some(499));
         Ok(())
     }
 
     #[test]
-    fn does_file_have_cover_art_m4a_yes() -> miette::Result<()> {
-        assert!(does_file_have_embedded_artwork(&m4a_with_art())?);
+    fn metadata_m4a_with_art() -> miette::Result<()> {
+        let md = SongMetaData::parse_file(&m4a_with_art())?;
+        dbg!(&md);
+        assert!(md.has_embedded_album_art);
+        assert!(md.title == Some("m4a with art".to_string()));
+        assert!(md.bitrate_kbps == Some(197));
         Ok(())
     }
 
     #[test]
-    fn does_file_have_cover_art_m4a_no() -> miette::Result<()> {
-        assert!(!does_file_have_embedded_artwork(&m4a_without_art())?);
+    fn metadata_m4a_without_art() -> miette::Result<()> {
+        let md = SongMetaData::parse_file(&m4a_without_art())?;
+        dbg!(&md);
+        assert!(!md.has_embedded_album_art);
+        assert!(md.title == Some("m4a without art".to_string()));
+        assert!(md.bitrate_kbps == Some(198));
         Ok(())
     }
 
