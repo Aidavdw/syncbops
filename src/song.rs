@@ -48,6 +48,10 @@ impl Display for Song {
         write!(f, "Song @{}", p)?;
         if let Some(external_art_path) = &self.external_album_art {
             write!(f, "w/ external art ({})", external_art_path.display())?;
+        } else if self.metadata.has_embedded_album_art {
+            write!(f, "w/ embedded art")?;
+        } else {
+            write!(f, "w/o art")?;
         }
         Ok(())
     }
