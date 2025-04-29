@@ -63,6 +63,7 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     let ffprobe_json_output = String::from_utf8(ffprobe.stdout).unwrap();
     let parsed: JsonValue =
         serde_json::from_str(&ffprobe_json_output).map_err(|_| FfmpegError::JsonMetadata)?;
+    dbg!(&parsed);
 
     // The first stream must be the audio.
     let audio_stream: &JsonValue = &parsed["streams"][0];
@@ -83,7 +84,12 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     // Extract the title from the global metadata block
     let title = parsed["format"]["tags"]["title"]
         .as_str()
+        // in FLAC, often fully capitalised
         .or_else(|| parsed["format"]["tags"]["TITLE"].as_str())
+        // in .ogg, sometimes the global metadata block is missing. Then try the audio
+        // stream-specific block.
+        .or_else(|| audio_stream["tags"]["TITLE"].as_str())
+        .or_else(|| audio_stream["tags"]["title"].as_str())
         .or_else(|| todo!("Try with other keys"))
         .map(|s| s.to_owned());
 
@@ -313,7 +319,11 @@ mod tests {
 
     #[test]
     fn does_file_have_cover_art_ogg_yes() -> miette::Result<()> {
-        assert!(does_file_have_embedded_artwork(&ogg_with_art())?);
+        let md = SongMetaData::parse_file(&ogg_with_art())?;
+        dbg!(&md);
+        assert!(md.has_embedded_album_art);
+        assert!(md.title == Some("ogg with art".to_string()));
+        assert!(md.bitrate_kbps == Some(499));
         Ok(())
     }
 
