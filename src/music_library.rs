@@ -249,7 +249,6 @@ pub fn find_songs_in_directory_and_subdirectories(
 }
 
 /// Checks if the source music file has been changed since it has been transcoded.
-/// TODO: Revert this to its original purpose: checking if the dates are different.
 pub fn has_music_file_changed(
     source_library: &Path,
     source: &Song,
@@ -283,6 +282,12 @@ pub fn has_music_file_changed(
     if let Some(db) = previous_sync_db {
         let library_relative_path = library_relative_path(&source.path, source_library);
         if let Some(previous_record) = db.get(&library_relative_path) {
+            // If the file is in the previous_sync_db, but is not actually present,
+            // consider it a missing file.
+            if !target.exists() {
+                return U::MissingTarget;
+            }
+            // Check if there is a saved hash, and if so, if they are the same.
             if let Some(hash_at_previous_sync) = previous_record.hash {
                 if hash_at_previous_sync == source_hash {
                     return U::Unchanged;
@@ -292,11 +297,18 @@ pub fn has_music_file_changed(
                 }
             }
             // Didn't save a hash at previous sync.
+            eprintln!(
+                "{source} does not have a hash for previous sync cached, but a record exists."
+            )
         };
-        // This file does not exist in the previous_sync db
+        // This file does not exist in the previous_sync db.
+        // If it does exist, but somehow does not appear in the previous sync db, do not early
+        // exit- apparently it is overwritten, but weirdly.
+        if !target.exists() {
+            return U::New;
+        }
     };
-    // No previous_sync_db is available.
-    // Checking for a previous sync didn't work.
+    // No previous_sync_db is available, or checking for a previous sync didn't work.
     // TODO: Re-instate the small check here to see if the source file is newer than the
     // destination file.
 
