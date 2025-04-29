@@ -12,7 +12,7 @@ pub struct Song {
     /// Where the external album art is, if it exists.
     pub external_album_art: Option<PathBuf>,
 
-    metadata: SongMetaData,
+    pub metadata: SongMetaData,
 }
 
 impl Song {
@@ -30,18 +30,11 @@ impl Song {
     }
 
     // Does the song have artwork information? Can use a
-    pub fn has_artwork(&self, cached_metadata: Option<SongMetaData>) -> ArtworkType {
+    pub fn has_artwork(&self) -> ArtworkType {
         if self.external_album_art.is_some() {
             return ArtworkType::External;
         }
-        let metadata = cached_metadata.unwrap_or_else(|| {
-            SongMetaData::parse_file(&self.path).unwrap_or_else(|e| {
-                panic!(
-                    "song {self} should have correct path, but still cannot parse into metadata: {e}"
-                );
-            })
-        });
-        if metadata.has_embedded_album_art {
+        if self.metadata.has_embedded_album_art {
             ArtworkType::Embedded
         } else {
             ArtworkType::None

@@ -277,7 +277,7 @@ pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
         .with_finish(indicatif::ProgressFinish::AndLeave)
         .filter(|song| {
             pb.set_message(format!("{}", song.path.display()));
-            song.has_artwork(None) == ArtworkType::None
+            song.has_artwork() == ArtworkType::None
         })
         .collect::<Vec<_>>();
     yee
@@ -574,18 +574,18 @@ mod tests {
         )?;
 
         assert!(updated_record.update_type.unwrap() == UpdateType::New);
-        let source_md = SongMetaData::parse_file(&song.path)?;
-        let target_md = SongMetaData::parse_file(&target)?;
+        // Don't care about external album art; that's not the responsibililty of sync_song
+        let output = Song::new(target, None)?;
         match art_strategy {
             ArtStrategy::None => assert!(
-                !target_md.has_embedded_album_art,
+                !output.metadata.has_embedded_album_art,
                 "Art strategy is to have no artwork yet there is embedded artwork."
             ),
             ArtStrategy::EmbedAll => {
                 // Can't have any artwork if there never was any.
-                if song.has_artwork(Some(source_md)) != ArtworkType::None {
+                if song.has_artwork() != ArtworkType::None {
                     assert!(
-                        target_md.has_embedded_album_art,
+                        output.metadata.has_embedded_album_art,
                         "ArtStrategy::EmbedAll, yet no embedded artwork.."
                     )
                 }
@@ -593,16 +593,16 @@ mod tests {
             ArtStrategy::PreferFile => {
                 if song.external_album_art.is_some() {
                     assert!(
-                !target_md.has_embedded_album_art,
+                !output.metadata.has_embedded_album_art,
                         "If song has dedicated artwork, it should copy it over with this ArtStrategy, and not embed it."
                     )
-                } else if source_md.has_embedded_album_art {
-                    assert!(target_md.has_embedded_album_art , "Even though not preferred option, should still retain artwork that was already embedded")
+                } else if song.metadata.has_embedded_album_art {
+                    assert!(output.metadata.has_embedded_album_art , "Even though not preferred option, should still retain artwork that was already embedded")
                 }
             }
             ArtStrategy::FileOnly => {
                 assert!(
-                    !target_md.has_embedded_album_art,
+                    !output.metadata.has_embedded_album_art,
                     "If File Only, should not have any embedded artwork."
                 )
             }
