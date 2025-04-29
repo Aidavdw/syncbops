@@ -30,7 +30,7 @@ pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError>
 #[derive(Debug)]
 pub struct SongMetaData {
     title: Option<String>,
-    bitrate_kbps: Option<u32>,
+    bitrate_kbps: u32,
     has_embedded_album_art: bool,
 }
 
@@ -74,12 +74,24 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     assert!(first_stream == "audio");
 
     // If it is given as a string, turn it into a number.
-    let bitrate_kbps = match &audio_stream["bit_rate"] {
+    let Some(bitrate_kbps) = match &audio_stream["bit_rate"] {
         JsonValue::Number(x) => x.as_u64().map(|a| a as u32),
         JsonValue::String(s) => s.parse::<u32>().ok(),
         _ => None,
     }
-    .map(|bits_per_second| bits_per_second / 1000);
+    // If bitrate of audio track is not given, then we can approximate it with the length
+    .or_else(||
+        // The file bit rate also includes the image stream, so it will be higher.
+        match &parsed["format"]["bit_rate"] {
+            JsonValue::Number(x) => x.as_u64().map(|a| a as u32),
+            JsonValue::String(s) => s.parse::<u32>().ok(),
+            _ => None,
+        })
+    .map(|bits_per_second| bits_per_second / 1000) else {
+        return Err(FfmpegError::Bitrate {
+            path: path.to_str().unwrap().to_owned(),
+        });
+    };
 
     // Extract the title from the global metadata block
     let title = parsed["format"]["tags"]["title"]
@@ -283,7 +295,7 @@ mod tests {
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("mp3 with art".to_string()));
-        assert!(md.bitrate_kbps == Some(169));
+        assert!(md.bitrate_kbps == 169);
         Ok(())
     }
 
@@ -293,7 +305,7 @@ mod tests {
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("mp3 without art".to_string()));
-        assert!(md.bitrate_kbps == Some(180));
+        assert!(md.bitrate_kbps == 180);
         Ok(())
     }
 
@@ -303,7 +315,8 @@ mod tests {
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("flac with art".to_string()));
-        assert!(md.bitrate_kbps.is_none());
+        // Not actual bitrate, because uses the fallback approximation here
+        assert!(md.bitrate_kbps == 1070);
         Ok(())
     }
 
@@ -313,7 +326,7 @@ mod tests {
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("Flac without art".to_string()));
-        assert!(md.bitrate_kbps.is_none());
+        assert!(md.bitrate_kbps == 869);
         Ok(())
     }
 
@@ -323,7 +336,7 @@ mod tests {
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("ogg with art".to_string()));
-        assert!(md.bitrate_kbps == Some(499));
+        assert!(md.bitrate_kbps == 499);
         Ok(())
     }
 
@@ -333,7 +346,7 @@ mod tests {
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("vorbis without art".to_string()));
-        assert!(md.bitrate_kbps == Some(499));
+        assert!(md.bitrate_kbps == 499);
         Ok(())
     }
 
@@ -343,7 +356,7 @@ mod tests {
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("m4a with art".to_string()));
-        assert!(md.bitrate_kbps == Some(197));
+        assert!(md.bitrate_kbps == 197);
         Ok(())
     }
 
@@ -353,7 +366,7 @@ mod tests {
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("m4a without art".to_string()));
-        assert!(md.bitrate_kbps == Some(198));
+        assert!(md.bitrate_kbps == 198);
         Ok(())
     }
 
