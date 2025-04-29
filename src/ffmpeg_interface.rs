@@ -132,7 +132,6 @@ pub fn transcode_song(
             vbr,
             quality,
         } => {
-            // TODO: Write tags as ID3v2.3. Right now it is ID3v4, which is less broadly supported.
             binding.arg("libmp3lame");
             if vbr {
                 // Specific for vbr: quality scale of the audio track, instead of the bitrate.
@@ -156,8 +155,12 @@ pub fn transcode_song(
         .arg("-map_metadata")
         .arg("0:s:0");
 
+    // More metadata mapping operations:
     match target_type {
-        MusicFileType::Mp3 { .. } => binding.arg("-id3v2_version").arg("3"),
+        MusicFileType::Mp3 { .. } => {
+            // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
+            binding.arg("-id3v2_version").arg("3")
+        }
         MusicFileType::Opus { .. } => todo!(),
         MusicFileType::Vorbis { .. } => todo!(),
         MusicFileType::Flac { .. } => todo!(),
