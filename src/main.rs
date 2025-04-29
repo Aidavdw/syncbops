@@ -58,7 +58,7 @@ struct Cli {
     /// Whether or not a record of the synchronisation will be written to the target library.
     /// If this is done, then future synchronising runs can be performed much faster, as file
     /// changes can be checked based on hashes.
-    #[arg(short, long, default_value_t = false)]
+    #[arg(short, long, default_value_t = true)]
     save_records: bool,
 }
 
@@ -166,6 +166,7 @@ fn main() -> miette::Result<()> {
 
     // Update the PreviousSyncDB with the newly added items.
     if cli.save_records {
+        println!("Writing new records so the next sync can be done faster");
         // Carry over any previous records (files that are not touched retain their original data).
         let mut new_records = previous_sync_db.unwrap_or_default();
 
