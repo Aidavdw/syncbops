@@ -16,19 +16,20 @@ use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// How should the file be updated? (or how was it updated last time)
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
 pub enum UpdateType {
     /// The file did not need to be changed, as it is up-to-date
-    Unchanged,
+    NoChange,
     /// The file is completely new, so everything had to be done from scratch
-    New,
+    NewTranscode,
     /// Updated because it was modified more recently than the shadow copy
-    Overwritten,
+    Overwrite,
     /// Actually unchanged, but forced into being overwritten.
-    ForcefullyOverwritten,
+    ForceOverwrite,
     /// The song is present in the SyncDB (It has been synced before),
     /// but the target file is no longer there
-    MissingTarget,
+    TranscodeMissingTarget,
 
     /// The target file does not yet exist, and the source file already has a low bitrate.
     /// It should just be copied, and not transcoded.
@@ -317,13 +318,13 @@ pub fn has_music_file_changed(
         match SongMetaData::parse_file(target) {
             Ok(shadow_metadata) => {
                 if source.metadata == shadow_metadata {
-                    U::Unchanged
+                    U::NoChange
                 } else {
                     // Just copy a file if you'd just incur more encoding loss
                     if source.metadata.bitrate_kbps < desired_bitrate {
                         U::Copied
                     } else {
-                        U::Overwritten
+                        U::Overwrite
                     }
                 }
             }
@@ -334,12 +335,12 @@ pub fn has_music_file_changed(
                     if source.metadata.bitrate_kbps < desired_bitrate {
                         U::Copied
                     } else {
-                        U::New
+                        U::NewTranscode
                     }
                 } else {
                     // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
                     eprintln!("Could not read metadata from shadow file, so overwriting it: {e}");
-                    U::Overwritten
+                    U::Overwrite
                 }
             }
         }
@@ -356,15 +357,15 @@ pub fn has_music_file_changed(
             // If the file is in the previous_sync_db, but is not actually present,
             // consider it a missing file.
             if !target.exists() {
-                return U::MissingTarget;
+                return U::TranscodeMissingTarget;
             }
             // Check if there is a saved hash, and if so, if they are the same.
             if let Some(hash_at_previous_sync) = previous_record.hash {
                 if hash_at_previous_sync == source_hash {
-                    return U::Unchanged;
+                    return U::NoChange;
                 } else {
                     // The hashes are not the same. Hence, the file must have changed.
-                    return U::Overwritten;
+                    return U::Overwrite;
                 }
             }
             // Didn't save a hash at previous sync.
@@ -377,7 +378,7 @@ pub fn has_music_file_changed(
             return if song.metadata.bitrate_kbps < desired_bitrate {
                 U::Copied
             } else {
-                U::New
+                U::NewTranscode
             };
         }
     };
@@ -459,9 +460,9 @@ pub fn sync_song(
     // If force, don't early exit.
     // Instead, overwrite.
     let status = match status {
-        U::Unchanged => {
+        U::NoChange => {
             if force {
-                U::ForcefullyOverwritten
+                U::ForceOverwrite
             } else {
                 return Ok(new_sync_record.set_update_type(status));
             }
@@ -619,7 +620,7 @@ mod tests {
     fn has_music_file_changed_identical_file() {
         assert_eq!(
             construct_has_music_file_changed("no_art", "no_art"),
-            UpdateType::Unchanged,
+            UpdateType::NoChange,
             "identical file, should say it has not changed"
         )
     }
@@ -630,7 +631,7 @@ mod tests {
             construct_has_music_file_changed("no_art", &format!("no_art_changed_{}", mod_suffix));
         assert_eq!(
             is_changed,
-            UpdateType::Overwritten,
+            UpdateType::Overwrite,
             "Says file did not change, while it did!"
         )
     }
@@ -673,7 +674,10 @@ mod tests {
             false,
         )?;
 
-        assert_eq!(updated_record.update_type.unwrap(), UpdateType::New);
+        assert_eq!(
+            updated_record.update_type.unwrap(),
+            UpdateType::NewTranscode
+        );
         // Don't care about external album art; that's not the responsibililty of sync_song
         let output = Song::new_debug(target, None)?;
         match art_strategy {

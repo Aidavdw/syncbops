@@ -155,7 +155,7 @@ pub fn save_record_to_previous_sync_db(
     // knowing when it was last added and when it was last modified is much
     // more useful information.
     // Therefore, only write information if it is actually useful.
-    if update_type == UpdateType::Unchanged {
+    if update_type == UpdateType::NoChange {
         return;
     }
     // Returned value is old value, don't need it anymore.

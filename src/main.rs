@@ -218,13 +218,14 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                 let update_type = sync_record
                     .update_type
                     .expect("Empty update type. Implementation error");
+                use UpdateType as U;
                 match update_type {
-                    UpdateType::Unchanged => n_unchanged += 1,
-                    UpdateType::New => n_new += 1,
-                    UpdateType::Overwritten => n_overwritten += 1,
-                    UpdateType::ForcefullyOverwritten => n_overwritten += 1,
-                    UpdateType::MissingTarget => n_missing_target += 1,
-                    UpdateType::Copied => n_copied += 1,
+                    U::NoChange => n_unchanged += 1,
+                    U::NewTranscode => n_new += 1,
+                    U::Overwrite => n_overwritten += 1,
+                    U::ForceOverwrite => n_overwritten += 1,
+                    U::TranscodeMissingTarget => n_missing_target += 1,
+                    U::Copied => n_copied += 1,
                 };
                 song_updates.push_str(&format!(
                     "{} →  [{:?}]\n",
