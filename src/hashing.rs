@@ -7,7 +7,10 @@ use std::{
     time::SystemTime,
 };
 
-use crate::music_library::{library_relative_path, UpdateType};
+use crate::{
+    music_library::{library_relative_path, UpdateType},
+    song::Song,
+};
 
 /// Data about how a file is at a certain point in time. By comparing SyncRecords, you can see
 /// if a file is out of date.
@@ -21,12 +24,12 @@ pub struct SyncRecord {
 }
 
 impl SyncRecord {
-    pub fn from_file_path(file: &Path, source_library: &Path) -> SyncRecord {
+    pub fn from_song(song: &Song) -> SyncRecord {
         SyncRecord {
-            library_relative_path: library_relative_path(file, source_library),
+            library_relative_path: song.library_relative_path.clone(),
             update_type: None,
             date: SystemTime::now(),
-            hash: hash_file(file),
+            hash: hash_file(&song.absolute_path),
         }
     }
 

@@ -6,9 +6,8 @@ use clap::{arg, Parser};
 use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_songs_in_directory_and_subdirectories,
-    library_relative_path, songs_without_album_art, sync_song, ArtStrategy, MusicFileType,
-    MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_songs_in_source_library, songs_without_album_art,
+    sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -77,7 +76,7 @@ fn main() -> miette::Result<()> {
     }
 
     println!("Discovering files in {}", source_library.display());
-    let songs = find_songs_in_directory_and_subdirectories(&source_library)?;
+    let songs = find_songs_in_source_library(&source_library)?;
     println!("Discovered {} songs.", songs.len());
     // Report if there are songs without album art.
     println!("Checking for songs without album art...");
@@ -120,13 +119,11 @@ fn main() -> miette::Result<()> {
         .par_iter()
         .progress_with(pb.clone())
         .map(|song| {
-            let rel_path = library_relative_path(&song.path, &source_library);
-            pb.set_message(format!("{}", rel_path.display()));
+            pb.set_message(format!("{}", song.library_relative_path.display()));
             (
                 song,
                 sync_song(
                     song,
-                    &source_library,
                     &target_library,
                     cli.target_filetype.clone(),
                     art_strategy,
@@ -141,7 +138,7 @@ fn main() -> miette::Result<()> {
     // Might be sorted differently because of parallel execution, so put in alphabetic order again.
     let sync_results = {
         let mut unsorted = sync_results;
-        unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.path.cmp(&i_b.path));
+        unsorted.sort_by(|(i_a, _), (i_b, _)| i_a.absolute_path.cmp(&i_b.absolute_path));
         unsorted
     };
 
@@ -212,13 +209,17 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     UpdateType::ForcefullyOverwritten => n_overwritten += 1,
                     UpdateType::MissingTarget => n_missing_target += 1,
                 };
-                song_updates.push_str(&format!("{} →  [{:?}]\n", song.path.display(), update_type))
+                song_updates.push_str(&format!(
+                    "{} →  [{:?}]\n",
+                    song.absolute_path.display(),
+                    update_type
+                ))
             }
             Err(e) => {
                 n_err += 1;
                 let err_msg = &format!(
                     "{} →  [Error]\n{:?}\n",
-                    song.path.display(),
+                    song.absolute_path.display(),
                     miette::Report::new(e)
                 );
                 error_messages.push_str(err_msg)
