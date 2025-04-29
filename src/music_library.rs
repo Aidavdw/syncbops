@@ -29,6 +29,10 @@ pub enum UpdateType {
     /// The song is present in the SyncDB (It has been synced before),
     /// but the target file is no longer there
     MissingTarget,
+
+    /// The target file does not yet exist, and the source file already has a low bitrate.
+    /// It should just be copied, and not transcoded.
+    Copied,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,7 +48,7 @@ pub enum MusicFileType {
     Mp3CBR {
         /// The constant bitrate in kbps
         #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
-        bitrate: u64,
+        bitrate: u32,
     },
     /// Variable bitrate MP3. A decent bit smaller than MP3 CBR, usually at negligible qualtiy
     /// degredation.
@@ -58,7 +62,7 @@ pub enum MusicFileType {
     Opus {
         /// Target bitrate in
         #[arg(short, long, value_name = "BITRATE", default_value_t = 180)]
-        bitrate: u64,
+        bitrate: u32,
         /// Compression algorithm complexity. 0-10. Trades quality for encoding time. higher is best quality. Does not affect filesize
         #[arg(short, long, default_value_t = 3)]
         compression_level: usize,
@@ -78,27 +82,66 @@ pub enum MusicFileType {
     },
 }
 
-// impl MusicFileType {
-//     pub fn get_extension(path: &Path) -> Option<MusicFileType> {
-//         use MusicFileType as M;
-//         if !path.exists() {
-//             return None;
-//         }
-//         if path.is_dir() {
-//             return None;
-//         };
-//         let ext = path.extension()?.to_ascii_lowercase();
-//
-//         Some(match ext.as_os_str().to_str()? {
-//             "mp3" => M::Mp3 {
-//                 constant_bitrate: 0,
-//                 vbr: false,
-//                 quality: 0,
-//             },
-//             _ => return None,
-//         })
-//     }
-// }
+impl MusicFileType {
+    /// To be able to compare quality and file sizes of different file types.
+    pub fn equivalent_bitrate(&self) -> u32 {
+        match self {
+            MusicFileType::Mp3CBR { bitrate } => *bitrate,
+            MusicFileType::Mp3VBR { quality } => match quality {
+                // Values obtained from https://trac.ffmpeg.org/wiki/Encode/MP3
+                0 => 245,
+                1 => 225,
+                2 => 190,
+                3 => 175,
+                4 => 165,
+                5 => 130,
+                6 => 115,
+                7 => 100,
+                8 => 85,
+                9 => 65,
+                _ => panic!("Invalid MP3 VBR quality number."),
+            },
+            MusicFileType::Opus {
+                bitrate,
+                compression_level: _,
+            } => *bitrate,
+            MusicFileType::Vorbis { quality } => {
+                let q = *quality;
+                // Equation obtained from https://trac.ffmpeg.org/wiki/TheoraVorbisEncodingGuide#VariableBitrateVBR
+                (if q < 4. {
+                    16. * (q + 4.)
+                } else if q < 8. {
+                    32. * q
+                } else {
+                    64. * (q - 4.)
+                })
+                .round() as u32
+            }
+            // Sorry man but if you want to transcode into flac you are using the wrong software.
+            MusicFileType::Flac { .. } => 800,
+        }
+    }
+
+    //     pub fn get_extension(path: &Path) -> Option<MusicFileType> {
+    //         use MusicFileType as M;
+    //         if !path.exists() {
+    //             return None;
+    //         }
+    //         if path.is_dir() {
+    //             return None;
+    //         };
+    //         let ext = path.extension()?.to_ascii_lowercase();
+    //
+    //         Some(match ext.as_os_str().to_str()? {
+    //             "mp3" => M::Mp3 {
+    //                 constant_bitrate: 0,
+    //                 vbr: false,
+    //                 quality: 0,
+    //             },
+    //             _ => return None,
+    //         })
+    //     }
+}
 
 impl Display for MusicFileType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -266,21 +309,33 @@ pub fn has_music_file_changed(
     song: &Song,
     target: &Path,
     previous_sync_db: Option<&PreviousSyncDb>,
+    // Any file that is above this bitrate will just be considered to be copied.
+    desired_bitrate: u32,
 ) -> UpdateType {
     use UpdateType as U;
-    fn compare_metadata(source: &Song, target: &Path) -> UpdateType {
+    fn compare_metadata(source: &Song, target: &Path, desired_bitrate: u32) -> UpdateType {
         match SongMetaData::parse_file(target) {
             Ok(shadow_metadata) => {
                 if source.metadata == shadow_metadata {
                     U::Unchanged
                 } else {
-                    U::Overwritten
+                    // Just copy a file if you'd just incur more encoding loss
+                    if source.metadata.bitrate_kbps < desired_bitrate {
+                        U::Copied
+                    } else {
+                        U::Overwritten
+                    }
                 }
             }
             Err(e) => {
                 if matches!(e, FfmpegError::FileDoesNotExist { .. }) {
                     // False alarm. Just consider it as new.
-                    U::New
+                    // Just copy a file if you'd just incur more encoding loss
+                    if source.metadata.bitrate_kbps < desired_bitrate {
+                        U::Copied
+                    } else {
+                        U::New
+                    }
                 } else {
                     // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
                     eprintln!("Could not read metadata from shadow file, so overwriting it: {e}");
@@ -293,7 +348,7 @@ pub fn has_music_file_changed(
     let Some(source_hash) = hash_file(&song.absolute_path) else {
         // If you can't determine a hash,there is no way of knowing whether or not the file has
         // changed.
-        return compare_metadata(song, target);
+        return compare_metadata(song, target, desired_bitrate);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
@@ -319,7 +374,11 @@ pub fn has_music_file_changed(
         // If it does exist, but somehow does not appear in the previous sync db, do not early
         // exit- apparently it is overwritten, but weirdly.
         if !target.exists() {
-            return U::New;
+            return if song.metadata.bitrate_kbps < desired_bitrate {
+                U::Copied
+            } else {
+                U::New
+            };
         }
     };
     // No previous_sync_db is available, or checking for a previous sync didn't work.
@@ -329,7 +388,7 @@ pub fn has_music_file_changed(
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
-    compare_metadata(song, target)
+    compare_metadata(song, target, desired_bitrate)
 }
 
 pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
@@ -392,7 +451,8 @@ pub fn sync_song(
         target_library,
         &target_filetype,
     );
-    let status = has_music_file_changed(song, &shadow, previous_sync_db);
+    let desired_bitrate = target_filetype.equivalent_bitrate();
+    let status = has_music_file_changed(song, &shadow, previous_sync_db, desired_bitrate);
     let new_sync_record = SyncRecord::from_song(song);
 
     // Early exit if unchanged.
@@ -422,14 +482,17 @@ pub fn sync_song(
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     if !dry_run {
         let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
-        // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
-        transcode_song(
-            &song.absolute_path,
-            &shadow,
-            target_filetype,
-            whether_to_embed_art,
-            song.external_album_art.as_deref(),
-        )?
+        if matches!(status, U::Copied) {
+            std::fs::copy(&song.absolute_path, shadow).expect("could not copy!");
+        } else {
+            transcode_song(
+                &song.absolute_path,
+                &shadow,
+                target_filetype,
+                whether_to_embed_art,
+                song.external_album_art.as_deref(),
+            )?;
+        }
     };
 
     // The sync record needs to have its new status written to it still!
@@ -548,7 +611,7 @@ mod tests {
             shadow.display()
         );
 
-        f(&original_song, &shadow, None)
+        f(&original_song, &shadow, None, 60)
     }
 
     #[test]
@@ -594,7 +657,7 @@ mod tests {
         let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
-        let target_filetype = MusicFileType::Mp3VBR { quality: 3 };
+        let target_filetype = MusicFileType::Mp3CBR { bitrate: 60 };
         let library_relative_path = library_relative_path(&song.absolute_path, &source_library);
         let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
@@ -610,7 +673,7 @@ mod tests {
             false,
         )?;
 
-        assert!(updated_record.update_type.unwrap() == UpdateType::New);
+        assert_eq!(updated_record.update_type.unwrap(), UpdateType::New);
         // Don't care about external album art; that's not the responsibililty of sync_song
         let output = Song::new_debug(target, None)?;
         match art_strategy {

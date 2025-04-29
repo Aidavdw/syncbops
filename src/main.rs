@@ -205,6 +205,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     let mut n_overwritten = 0;
     let mut n_err = 0;
     let mut n_missing_target = 0;
+    let mut n_copied = 0;
     let mut error_messages = if verbose {
         String::with_capacity(50000)
     } else {
@@ -223,6 +224,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
                     UpdateType::Overwritten => n_overwritten += 1,
                     UpdateType::ForcefullyOverwritten => n_overwritten += 1,
                     UpdateType::MissingTarget => n_missing_target += 1,
+                    UpdateType::Copied => n_copied += 1,
                 };
                 song_updates.push_str(&format!(
                     "{} →  [{:?}]\n",
@@ -246,6 +248,7 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     summary.push_str(&format!("New songs: {}\n", n_new));
     summary.push_str(&format!("Changed songs (overwritten): {}\n", n_overwritten));
     summary.push_str(&format!("Re-added missing: {}\n", n_missing_target));
+    summary.push_str(&format!("Copied (not transcoded): {}\n", n_copied));
     summary.push_str(&format!("New album art: {}\n", new_cover_arts.len()));
     if n_err == 0 {
         summary.push_str("No Errors :D\n");
