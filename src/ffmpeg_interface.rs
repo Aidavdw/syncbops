@@ -1,37 +1,18 @@
 use crate::music_library::MusicFileType;
 use itertools::Itertools;
-use regex::Regex;
 use serde_json::Value as JsonValue;
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
 
-/// Queries `ffprobe "<filename>" 2>&1 | grep "Cover"`.
-pub fn does_file_have_embedded_artwork(path: &Path) -> Result<bool, FfmpegError> {
-    let mut binding = Command::new("ffprobe");
-    binding.arg(path);
-    let ffprobe = binding
-        .output()
-        .map_err(|e| FfmpegError::CheckForAlbumArtCommand {
-            source: e,
-            arguments: binding
-                .get_args()
-                .map(|osstr| osstr.to_string_lossy())
-                .join(" "),
-        })?;
-    let txt = String::from_utf8(ffprobe.stderr).unwrap();
-    // In ffmpeg, embedded artworks are considered as extra "streams". They are, confusingly enough, of type video. Generally they are also tagged with a meta tag, such as "cover"
-    Ok(txt.contains("Video"))
-}
-
 /// Gets stuff like title, artist name, etc.
 /// Also, whether the song has album art.
 #[derive(Debug)]
 pub struct SongMetaData {
-    title: Option<String>,
-    bitrate_kbps: u32,
-    has_embedded_album_art: bool,
+    pub title: Option<String>,
+    pub bitrate_kbps: u32,
+    pub has_embedded_album_art: bool,
 }
 
 impl SongMetaData {
@@ -102,7 +83,7 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
         // stream-specific block.
         .or_else(|| audio_stream["tags"]["TITLE"].as_str())
         .or_else(|| audio_stream["tags"]["title"].as_str())
-        .or_else(|| todo!("Try with other keys"))
+        .or_else(|| todo!("Can't extract title. Implement other fallbacks!"))
         .map(|s| s.to_owned());
 
     // To check if the thing has album art, just check if there is a video stream.
@@ -231,7 +212,6 @@ pub enum FfmpegError {
 
 #[cfg(test)]
 mod tests {
-    use super::does_file_have_embedded_artwork;
     use crate::{ffmpeg_interface::SongMetaData, music_library::MusicFileType};
     use std::path::PathBuf;
 
@@ -398,8 +378,10 @@ mod tests {
             external_art_to_embed.as_deref(),
         )?;
         assert!(std::fs::exists(&target).unwrap());
-        if does_file_have_embedded_artwork(&source)? || external_art_to_embed.is_some() {
-            assert_eq!(does_file_have_embedded_artwork(&target)?, embed_art);
+        let source_md = SongMetaData::parse_file(&source)?;
+        let target_md = SongMetaData::parse_file(&target)?;
+        if source_md.has_embedded_album_art || external_art_to_embed.is_some() {
+            assert_eq!(target_md.has_embedded_album_art, embed_art)
         }
         Ok(())
     }

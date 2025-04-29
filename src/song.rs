@@ -1,4 +1,4 @@
-use crate::{ffmpeg_interface::does_file_have_embedded_artwork, music_library::ArtworkType};
+use crate::{ffmpeg_interface::SongMetaData, music_library::ArtworkType};
 use std::{fmt::Display, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
@@ -11,15 +11,19 @@ pub struct Song {
 }
 
 impl Song {
-    pub fn has_artwork(&self) -> ArtworkType {
+    // Does the song have artwork information? Can use a
+    pub fn has_artwork(&self, cached_metadata: Option<SongMetaData>) -> ArtworkType {
         if self.external_album_art.is_some() {
             return ArtworkType::External;
         }
-        let Ok(has_embedded_artwork) = does_file_have_embedded_artwork(&self.path) else {
-            eprintln!("Could not read artwork for {}: ", self);
-            return ArtworkType::None;
-        };
-        if has_embedded_artwork {
+        let metadata = cached_metadata.unwrap_or_else(|| {
+            SongMetaData::parse_file(&self.path).unwrap_or_else(|e| {
+                panic!(
+                    "song {self} should have correct path, but still cannot parse into metadata: {e}"
+                );
+            })
+        });
+        if metadata.has_embedded_album_art {
             ArtworkType::Embedded
         } else {
             ArtworkType::None
@@ -30,6 +34,10 @@ impl Song {
 impl Display for Song {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let p = self.path.to_str().unwrap();
-        write!(f, "Song @{}, artwork={:?}", p, self.has_artwork())
+        write!(f, "Song @{}", p)?;
+        if let Some(external_art_path) = &self.external_album_art {
+            write!(f, "w/ external art ({})", external_art_path.display())?;
+        }
+        Ok(())
     }
 }

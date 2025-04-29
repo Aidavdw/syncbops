@@ -1,5 +1,6 @@
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
+use crate::ffmpeg_interface::SongMetaData;
 use crate::hashing::compare_records;
 use crate::hashing::hash_file;
 use crate::hashing::PreviousSyncDb;
@@ -76,6 +77,28 @@ pub enum MusicFileType {
         quality: u64,
     },
 }
+
+// impl MusicFileType {
+//     pub fn get_extension(path: &Path) -> Option<MusicFileType> {
+//         use MusicFileType as M;
+//         if !path.exists() {
+//             return None;
+//         }
+//         if path.is_dir() {
+//             return None;
+//         };
+//         let ext = path.extension()?.to_ascii_lowercase();
+//
+//         Some(match ext.as_os_str().to_str()? {
+//             "mp3" => M::Mp3 {
+//                 constant_bitrate: 0,
+//                 vbr: false,
+//                 quality: 0,
+//             },
+//             _ => return None,
+//         })
+//     }
+// }
 
 impl Display for MusicFileType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -250,7 +273,7 @@ pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
         .with_finish(indicatif::ProgressFinish::AndLeave)
         .filter(|song| {
             pb.set_message(format!("{}", song.path.display()));
-            song.has_artwork() == ArtworkType::None
+            song.has_artwork(None) == ArtworkType::None
         })
         .collect::<Vec<_>>();
     yee
@@ -424,7 +447,7 @@ pub enum MusicLibraryError {
 mod tests {
     use super::songs_without_album_art;
     use crate::{
-        ffmpeg_interface::does_file_have_embedded_artwork,
+        ffmpeg_interface::SongMetaData,
         hashing::PreviousSyncDb,
         music_library::{
             get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, MusicFileType,
@@ -547,16 +570,18 @@ mod tests {
         )?;
 
         assert!(updated_record.update_type.unwrap() == UpdateType::New);
+        let source_md = SongMetaData::parse_file(&song.path)?;
+        let target_md = SongMetaData::parse_file(&target)?;
         match art_strategy {
             ArtStrategy::None => assert!(
-                !does_file_have_embedded_artwork(&target)?,
+                !target_md.has_embedded_album_art,
                 "Art strategy is to have no artwork yet there is embedded artwork."
             ),
             ArtStrategy::EmbedAll => {
                 // Can't have any artwork if there never was any.
-                if song.has_artwork() != ArtworkType::None {
+                if song.has_artwork(Some(source_md)) != ArtworkType::None {
                     assert!(
-                        does_file_have_embedded_artwork(&target)?,
+                        target_md.has_embedded_album_art,
                         "ArtStrategy::EmbedAll, yet no embedded artwork.."
                     )
                 }
@@ -564,16 +589,16 @@ mod tests {
             ArtStrategy::PreferFile => {
                 if song.external_album_art.is_some() {
                     assert!(
-                        !does_file_have_embedded_artwork(&target)?,
+                !target_md.has_embedded_album_art,
                         "If song has dedicated artwork, it should copy it over with this ArtStrategy, and not embed it."
                     )
-                } else if does_file_have_embedded_artwork(&song.path)? {
-                    assert!(does_file_have_embedded_artwork(&target)?, "Even though not preferred option, should still retain artwork that was already embedded")
+                } else if source_md.has_embedded_album_art {
+                    assert!(target_md.has_embedded_album_art , "Even though not preferred option, should still retain artwork that was already embedded")
                 }
             }
             ArtStrategy::FileOnly => {
                 assert!(
-                    !does_file_have_embedded_artwork(&target)?,
+                    !target_md.has_embedded_album_art,
                     "If File Only, should not have any embedded artwork."
                 )
             }
