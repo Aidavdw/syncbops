@@ -48,6 +48,10 @@ struct Cli {
     /// Display more info.
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    /// Maximum amount of threads to use. If no value given, will use all threads.
+    #[arg(short, long)]
+    thread_count: Option<usize>,
 }
 
 fn main() -> miette::Result<()> {
@@ -63,6 +67,13 @@ fn main() -> miette::Result<()> {
 
     if cli.dry_run {
         println!("Performing a dry run, so no actual changes will be made to the filesystem.")
+    }
+
+    if let Some(x) = cli.thread_count {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(x)
+            .build_global()
+            .unwrap_or_else(|_| panic!("Cannot set amount of threads to {}. Exiting.", x));
     }
 
     println!("Discovering files in {}", source_library.display());
