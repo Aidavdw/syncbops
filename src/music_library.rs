@@ -1,7 +1,6 @@
 use crate::ffmpeg_interface::transcode_song;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::ffmpeg_interface::SongMetaData;
-use crate::hashing::compare_records;
 use crate::hashing::hash_file;
 use crate::hashing::PreviousSyncDb;
 use crate::hashing::SyncRecord;
@@ -251,7 +250,7 @@ pub fn find_songs_in_directory_and_subdirectories(
 /// Checks if the source music file has been changed since it has been transcoded.
 pub fn has_music_file_changed(
     source_library: &Path,
-    source: &Song,
+    song: &Song,
     target: &Path,
     previous_sync_db: Option<&PreviousSyncDb>,
 ) -> UpdateType {
@@ -273,14 +272,14 @@ pub fn has_music_file_changed(
         }
     }
 
-    let Some(source_hash) = hash_file(&source.path) else {
+    let Some(source_hash) = hash_file(&song.path) else {
         // If you can't determine a hash,there is no way of knowing whether or not the file has
         // changed.
-        return compare_metadata(source, target);
+        return compare_metadata(song, target);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
-        let library_relative_path = library_relative_path(&source.path, source_library);
+        let library_relative_path = library_relative_path(&song.path, source_library);
         if let Some(previous_record) = db.get(&library_relative_path) {
             // If the file is in the previous_sync_db, but is not actually present,
             // consider it a missing file.
@@ -297,9 +296,7 @@ pub fn has_music_file_changed(
                 }
             }
             // Didn't save a hash at previous sync.
-            eprintln!(
-                "{source} does not have a hash for previous sync cached, but a record exists."
-            )
+            eprintln!("{song} does not have a hash for previous sync cached, but a record exists.")
         };
         // This file does not exist in the previous_sync db.
         // If it does exist, but somehow does not appear in the previous sync db, do not early
@@ -315,7 +312,7 @@ pub fn has_music_file_changed(
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
-    compare_metadata(source, target)
+    compare_metadata(song, target)
 }
 
 pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
@@ -373,26 +370,12 @@ pub fn sync_song(
     dry_run: bool,
 ) -> Result<SyncRecord, MusicLibraryError> {
     use UpdateType as U;
-    let new_sync_record = SyncRecord::from_file_path(&song.path, source_library);
-
-    // Compare this potentially new file to what has been synced before.
-    // If it is not in the sync_db, consider that the file should be overwritten anyway.
-    let status = match previous_sync_db.get(&new_sync_record.library_relative_path) {
-        Some(previous_record) => compare_records(&new_sync_record, previous_record),
-        None => U::New,
-    };
-
     // TODO:If it exists with a different filetype, give a warning
     let library_relative_path = library_relative_path(&song.path, source_library);
     let shadow = get_shadow_filename(&library_relative_path, target_library, &target_filetype);
+    let status = has_music_file_changed(source_library, song, &shadow, Some(previous_sync_db));
 
-    // If the file is in the previous_sync_db, but is not actually present,
-    // consider it a missing file.
-    let status = if !shadow.exists() && !matches!(status, U::New) {
-        U::MissingTarget
-    } else {
-        status
-    };
+    let new_sync_record = SyncRecord::from_file_path(&song.path, source_library);
 
     // Early exit if unchanged.
     // If force, don't early exit.
@@ -409,19 +392,11 @@ pub fn sync_song(
         _ => status,
     };
 
-    // If the previous_sync_db thinks its new, but the file already exists, it is actually
-    // overwritten.
-    let status = if shadow.exists() && status == U::New {
-        U::Overwritten
-    } else {
-        status
-    };
-    // Similarly, if it thinks it is overwritten, but it actually was actually not there yet,
-    // it is re-added.
-    let status = if !shadow.exists() && status == U::Overwritten {
-        U::New
-    } else {
-        status
+    let whether_to_embed_art = match art_strategy {
+        ArtStrategy::None => false,
+        ArtStrategy::EmbedAll => true,
+        ArtStrategy::PreferFile => song.external_album_art.is_none(),
+        ArtStrategy::FileOnly => false,
     };
 
     // Can't change files in place with ffmpeg, so if we need to update then we need to
@@ -429,21 +404,12 @@ pub fn sync_song(
     // If the source directory does not yet exist, create it. ffmpeg will otherwise throw an error.
     if !dry_run {
         let _ = fs::create_dir_all(shadow.parent().expect("Cannot get parent dir of shadow"));
-    }
-
-    // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
-    let embed_art = match art_strategy {
-        ArtStrategy::None => false,
-        ArtStrategy::EmbedAll => true,
-        ArtStrategy::PreferFile => song.external_album_art.is_none(),
-        ArtStrategy::FileOnly => false,
-    };
-    if !dry_run {
+        // TODO: If the source file is already a lower bitrate, then don't do any transcoding.
         transcode_song(
             &song.path,
             &shadow,
             target_filetype,
-            embed_art,
+            whether_to_embed_art,
             song.external_album_art.as_deref(),
         )?
     };

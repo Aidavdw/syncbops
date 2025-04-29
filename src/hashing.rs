@@ -36,27 +36,9 @@ impl SyncRecord {
         proxy
     }
 }
-pub fn compare_records(source: &SyncRecord, previous: &SyncRecord) -> UpdateType {
-    use UpdateType as U;
-    if let Some(new_hash) = source.hash {
-        if let Some(other_hash) = previous.hash {
-            // Both have hashes, so we can compare hashes.
-            let is_hash_different = new_hash != other_hash;
-            if is_hash_different {
-                return U::Overwritten;
-            } else {
-                return U::Unchanged;
-            }
-        }
-        // New one can be hashed, but the existing one does not have a hash.
-        // It does have an entry though, so it counts as overwriting, not as adding a new
-        // one.
-        return U::Overwritten;
-    }
-    // New one cannot be hashed. We don't know about the new file, so can only overwrite
-    U::Overwritten
-}
 
+/// Knowledge on how the previous sync was done.
+/// Map where the keys are source-library relative paths.
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
 
 /// Tries to read the previous sync db into one of the possible locations
