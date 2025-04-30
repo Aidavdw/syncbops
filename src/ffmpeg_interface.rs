@@ -146,7 +146,13 @@ pub fn transcode_song(
             // See https://trac.ffmpeg.org/wiki/Encode/MP3#VBREncoding
             binding.arg("-b:a").arg(format!("{}k", bitrate));
         }
-        _ => panic!("MusicFileType not yet implemented as a target."),
+        M::Vorbis { quality } => {
+            binding
+                .arg("libvorbis")
+                .arg("-qscale:a")
+                .arg(format!("{quality:.3}"));
+        }
+        _ => panic!("MusicFileType not yet implemented as a target. Feel free to send a PR <3"),
     }
 
     // Take all the metadata from file 0 (source library music file).
@@ -162,14 +168,14 @@ pub fn transcode_song(
     match target_type {
         MusicFileType::Mp3VBR { .. } => {
             // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
-            binding.arg("-id3v2_version").arg("3")
+            binding.arg("-id3v2_version").arg("3");
         }
         MusicFileType::Mp3CBR { .. } => {
             // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
-            binding.arg("-id3v2_version").arg("3")
+            binding.arg("-id3v2_version").arg("3");
         }
         MusicFileType::Opus { .. } => todo!(),
-        MusicFileType::Vorbis { .. } => todo!(),
+        MusicFileType::Vorbis { .. } => (),
         MusicFileType::Flac { .. } => todo!(),
     };
 
@@ -407,10 +413,12 @@ mod tests {
         source: PathBuf,
         embed_art: bool,
         external_art_to_embed: Option<PathBuf>,
+        target_type: MusicFileType,
     ) -> miette::Result<()> {
         use super::transcode_song;
         let random_string = random_string::generate(16, "abcdefghijklmnopqrstuvwxyz");
-        let target: PathBuf = format!("/tmp/transcode_test_{}.mp3", random_string).into();
+        let target: PathBuf =
+            format!("/tmp/transcode_test_{}.{}", random_string, target_type).into();
         println!("Using {}", target.display());
         assert!(
             !std::fs::exists(&target).unwrap(),
@@ -422,7 +430,7 @@ mod tests {
         transcode_song(
             &source,
             &target,
-            MusicFileType::Mp3VBR { quality: 3 },
+            target_type,
             embed_art,
             external_art_to_embed.as_deref(),
         )?;
@@ -436,170 +444,194 @@ mod tests {
     }
 
     #[test]
+    /// Keep embedded art
+    fn mp3_to_ogg_embedded_art() -> miette::Result<()> {
+        transcode_file_test(
+            mp3_with_art(),
+            true,
+            None,
+            MusicFileType::Vorbis { quality: 8. },
+        )
+    }
+
+    fn transcode_to_mp3_vbr_test(
+        source: PathBuf,
+        embed_art: bool,
+        external_art_to_embed: Option<PathBuf>,
+    ) -> miette::Result<()> {
+        transcode_file_test(
+            source,
+            embed_art,
+            external_art_to_embed,
+            MusicFileType::Mp3VBR { quality: 3 },
+        )
+    }
+
+    #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn mp3_no_art_embed() -> miette::Result<()> {
-        transcode_file_test(mp3_without_art(), true, None)
+        transcode_to_mp3_vbr_test(mp3_without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn mp3_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(mp3_with_art(), true, None)
+        transcode_to_mp3_vbr_test(mp3_with_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn mp3_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(mp3_with_art(), false, None)
+        transcode_to_mp3_vbr_test(mp3_with_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn mp3_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(mp3_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(mp3_without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn mp3_external_art_embed() -> miette::Result<()> {
-        transcode_file_test(mp3_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(mp3_without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_embed() -> miette::Result<()> {
-        transcode_file_test(mp3_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(mp3_with_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_drop() -> miette::Result<()> {
-        transcode_file_test(mp3_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(mp3_with_art(), false, external_art())
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn ogg_no_art_embed() -> miette::Result<()> {
-        transcode_file_test(ogg_without_art(), true, None)
+        transcode_to_mp3_vbr_test(ogg_without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn ogg_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(ogg_with_art(), true, None)
+        transcode_to_mp3_vbr_test(ogg_with_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn ogg_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(ogg_with_art(), false, None)
+        transcode_to_mp3_vbr_test(ogg_with_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn ogg_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(ogg_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(ogg_without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn ogg_external_art_embed() -> miette::Result<()> {
-        transcode_file_test(ogg_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(ogg_without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn ogg_both_embed() -> miette::Result<()> {
-        transcode_file_test(ogg_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(ogg_with_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn ogg_both_drop() -> miette::Result<()> {
-        transcode_file_test(ogg_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(ogg_with_art(), false, external_art())
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn flac_no_art_embed() -> miette::Result<()> {
-        transcode_file_test(flac_without_art(), true, None)
+        transcode_to_mp3_vbr_test(flac_without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn flac_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(flac_with_art(), true, None)
+        transcode_to_mp3_vbr_test(flac_with_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn flac_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(flac_with_art(), false, None)
+        transcode_to_mp3_vbr_test(flac_with_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn flac_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(flac_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(flac_without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn flac_external_art_embed() -> miette::Result<()> {
-        transcode_file_test(flac_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(flac_without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn flac_both_embed() -> miette::Result<()> {
-        transcode_file_test(flac_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(flac_with_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn flac_both_drop() -> miette::Result<()> {
-        transcode_file_test(flac_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(flac_with_art(), false, external_art())
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn m4a_no_art_embed() -> miette::Result<()> {
-        transcode_file_test(m4a_without_art(), true, None)
+        transcode_to_mp3_vbr_test(m4a_without_art(), true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn m4a_keep_embedded_art() -> miette::Result<()> {
-        transcode_file_test(m4a_with_art(), true, None)
+        transcode_to_mp3_vbr_test(m4a_with_art(), true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn m4a_embedded_art_drop() -> miette::Result<()> {
-        transcode_file_test(m4a_with_art(), false, None)
+        transcode_to_mp3_vbr_test(m4a_with_art(), false, None)
     }
 
     #[test]
     /// drop external art
     fn m4a_external_art_drop() -> miette::Result<()> {
-        transcode_file_test(m4a_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(m4a_without_art(), false, external_art())
     }
 
     #[test]
     /// embed external art
     fn m4a_external_art_embed() -> miette::Result<()> {
-        transcode_file_test(m4a_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(m4a_without_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn m4a_both_embed() -> miette::Result<()> {
-        transcode_file_test(m4a_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(m4a_with_art(), true, external_art())
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn m4a_both_drop() -> miette::Result<()> {
-        transcode_file_test(m4a_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(m4a_with_art(), false, external_art())
     }
 }

@@ -67,13 +67,6 @@ fn main() -> miette::Result<()> {
     let source_library = cli.source_library;
     let target_library = cli.target_library;
 
-    // TODO: Validate if e.g. FLAC level is between 0 and 12, otherwise return error.
-    match cli.target_filetype {
-        MusicFileType::Mp3VBR { .. } => (),
-        MusicFileType::Mp3CBR { .. } => (),
-        _ => return Err(MusicLibraryError::OutputCodecNotYetImplemented.into()),
-    }
-
     if cli.dry_run {
         println!("Performing a dry run, so no actual changes will be made to the filesystem.")
     }
