@@ -50,7 +50,7 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     let ffprobe_json_output = String::from_utf8(ffprobe.stdout).unwrap();
     let parsed: JsonValue =
         serde_json::from_str(&ffprobe_json_output).map_err(|_| FfmpegError::JsonMetadata)?;
-    dbg!(&parsed);
+    // dbg!(&parsed);
 
     // There must be only one audio stream here, but there might be more video streams (different
     // art).
