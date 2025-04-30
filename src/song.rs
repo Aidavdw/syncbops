@@ -63,8 +63,8 @@ impl Song {
 
 impl Display for Song {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let p = self.absolute_path.to_str().unwrap();
-        write!(f, "Song @{}", p)?;
+        let p = self.library_relative_path.to_str().unwrap();
+        write!(f, "{} ", p)?;
         if let Some(external_art_path) = &self.external_album_art {
             write!(f, "w/ external art ({})", external_art_path.display())?;
         } else if self.metadata.has_embedded_album_art {
