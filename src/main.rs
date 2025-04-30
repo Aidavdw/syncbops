@@ -39,8 +39,8 @@ struct Cli {
     art_strategy: ArtStrategy,
 
     /// TODO: Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
-    #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
-    embed_art_resolution: u64,
+    // #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
+    // embed_art_resolution: u64,
 
     /// Don't actually make any changes to the filesystem, just report on what it would look like after the operation. Makes most sense to run together with verbose option.
     #[arg(short, long, default_value_t = false)]
@@ -54,11 +54,12 @@ struct Cli {
     #[arg(short, long)]
     thread_count: Option<usize>,
 
-    /// Whether or not a record of the synchronisation will be written to the target library.
-    /// If this is done, then future synchronising runs can be performed much faster, as file
+    /// Disable writing of records of the current synchronisation run to the target library.
+    /// future synchronising runs can be performed much faster if these are present, as file
     /// changes can be checked based on hashes.
-    #[arg(short, long, default_value_t = true)]
-    save_records: bool,
+    /// Disabling them makes updating much slower, but does not contaminate the target dir.
+    #[arg(long, default_value_t = false)]
+    dont_save_records: bool,
 }
 
 fn main() -> miette::Result<()> {
@@ -169,7 +170,7 @@ fn main() -> miette::Result<()> {
     };
 
     // Update the PreviousSyncDB with the newly added items.
-    if cli.save_records && !cli.dry_run {
+    if !cli.dont_save_records && !cli.dry_run {
         println!("Writing new records so the next sync can be done faster");
         // Carry over any previous records (files that are not touched retain their original data).
         let mut new_records = previous_sync_db.unwrap_or_default();
