@@ -12,6 +12,7 @@ use indicatif::ProgressStyle;
 use itertools::Itertools;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -237,12 +238,24 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
             Some(item)
         })
         .collect_vec();
-    // let filenames: Vec<PathBuf> = {
-    //     let mut a = Vec::with_capacity(4000);
-    //     get_filenames_in_dir_recursively(&mut a, library_root)
-    //         .map_err(MusicLibraryError::ListFilenames)?;
-    //     a
-    // };
+
+    // Create an easy-to-access way to find external album art
+    let external_album_arts: HashMap<PathBuf, PathBuf> = {
+        let mut m = HashMap::with_capacity(20);
+        for image_file in filenames
+            .iter()
+            .filter(|path| is_image_file_album_art(path))
+        {
+            // TODO: Instead of picking the first one, sort by quality and prefer the highest
+            // quality one.
+            let containing_directory = image_file
+                .parent()
+                .expect("should be able to get containing directory of image file.");
+            m.entry(containing_directory.to_path_buf())
+                .or_insert(image_file.to_path_buf());
+        }
+        m
+    };
 
     // Since we are also checking the files for metadata, it is worth doing this in parallel.
     let pb = ProgressBar::new(filenames.len() as u64);
@@ -266,7 +279,7 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
                 FileType::Music => (),
                 FileType::Art => return None,
             };
-            match process_song_file(path, library_root) {
+            match process_song_file(path, library_root, &external_album_arts) {
                 Ok(song) => Some(song),
                 Err(e) => {
                     eprintln!("Could not process song at {}: {}", path.display(), e);
@@ -278,56 +291,33 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
     Ok(songs)
 }
 
-fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, MusicLibraryError> {
+fn process_song_file(
+    song_path: &Path,
+    source_library: &Path,
+    external_album_arts: &HashMap<PathBuf, PathBuf>,
+) -> Result<Song, MusicLibraryError> {
     debug_assert!(matches!(
         identify_file_type(song_path).unwrap(),
         FileType::Music
     ));
 
-    fn get_images_in_folder(path: &Path) -> impl Iterator<Item = PathBuf> {
-        fs::read_dir(path)
-            .expect("Can't read parent dir")
-            .filter_map(|dir_entry| {
-                let other_file_in_dir = dir_entry.ok()?.path();
-                let other_filetype = identify_file_type(&other_file_in_dir)?;
-                if matches!(other_filetype, FileType::Folder) {
-                    Some(other_file_in_dir)
-                } else {
-                    None
-                }
-            })
-    }
-
-    // Check if there is an album art in this folder too. If there is, then pick the one that is
-    // actually like a "cover.jpg". If this folder does not have this, check the parent folder.
+    // If there is album art in this folder, use it.
+    // If there is not, see if the parent directory maybe has it.
     let containing_folder = song_path.parent().expect("Can't get song parent");
-    let external_album_art_in_same_folder =
-        get_images_in_folder(containing_folder).find(|img_path| is_image_file_album_art(img_path));
-    if external_album_art_in_same_folder.is_some() {
-        return Song::new(
-            song_path.to_path_buf(),
-            source_library.to_path_buf(),
-            external_album_art_in_same_folder,
-        );
-    }
-
-    // if this folder does not have a folder.jpg/cover.png or whatever, check the parent directory.
-    let album_art_in_parent_folder = get_images_in_folder(
-        containing_folder
-            .parent()
-            .expect("Can't access parent's parent."),
+    let external_album_art = external_album_arts
+        .get(containing_folder)
+        .or_else(|| {
+            let one_folder_up = containing_folder
+                .parent()
+                .expect("Can't access parent's parent.");
+            external_album_arts.get(one_folder_up)
+        })
+        .cloned();
+    Song::new(
+        song_path.to_path_buf(),
+        source_library.to_path_buf(),
+        external_album_art,
     )
-    .find(|img_in_higher_folder| is_image_file_album_art(img_in_higher_folder));
-    if album_art_in_parent_folder.is_some() {
-        return Song::new(
-            song_path.to_path_buf(),
-            source_library.to_path_buf(),
-            album_art_in_parent_folder,
-        );
-    }
-
-    // Guess there is no external album art for this one!
-    Song::new(song_path.to_path_buf(), source_library.to_path_buf(), None)
 }
 
 /// Checks if the source music file has been changed since it has been transcoded.
