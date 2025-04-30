@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
+use walkdir::WalkDir;
 
 /// How should the file be updated? (or how was it updated last time)
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Copy)]
@@ -305,6 +306,138 @@ fn recursively_find_songs_in_directory_and_subdirectories(
     Ok(songs_in_this_dir_and_subdirs)
 }
 
+pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibraryError> {
+    let filenames = WalkDir::new(library_root)
+        .into_iter()
+        .filter_map(|direntry_res| {
+            let item = match direntry_res {
+                Ok(x) => x,
+                Err(e) => {
+                    eprintln!("Could not read subdir in library: {e}",);
+                    return None;
+                }
+            }
+            .path()
+            .to_path_buf();
+            if item.is_dir() {
+                return None;
+            }
+            Some(item)
+        })
+        .collect_vec();
+    // let filenames: Vec<PathBuf> = {
+    //     let mut a = Vec::with_capacity(4000);
+    //     get_filenames_in_dir_recursively(&mut a, library_root)
+    //         .map_err(MusicLibraryError::ListFilenames)?;
+    //     a
+    // };
+
+    // Since we are also checking the files for metadata, it is worth doing this in parallel.
+    let pb = ProgressBar::new(filenames.len() as u64);
+    pb.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed}] [{bar:60.cyan/blue}] {pos}/{len} [ETA: {eta}] {msg}")
+            .unwrap()
+            .progress_chars("#>-"),
+    );
+    let songs = filenames
+        .par_iter()
+        .progress_with(pb.clone())
+        .filter_map(|path| {
+            let Some(filetype) = identify_file_type(path) else {
+                eprintln!("Could not identify file {}", path.display(),);
+                return None;
+            };
+            // Don't do anything if this is not a music file.
+            match filetype {
+                FileType::Folder => return None,
+                FileType::Music => (),
+                FileType::Art => return None,
+            };
+            match process_song_file(path, library_root) {
+                Ok(song) => Some(song),
+                Err(e) => {
+                    eprintln!("Could not process song at {}: {}", path.display(), e);
+                    None
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(songs)
+}
+
+fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, MusicLibraryError> {
+    debug_assert!(matches!(
+        identify_file_type(song_path).unwrap(),
+        FileType::Music
+    ));
+
+    fn get_images_in_folder(path: &Path) -> impl Iterator<Item = PathBuf> {
+        fs::read_dir(path)
+            .expect("Can't read parent dir")
+            .into_iter()
+            .filter_map(|dir_entry| {
+                let other_file_in_dir = dir_entry.ok()?.path();
+                let other_filetype = identify_file_type(&other_file_in_dir)?;
+                if matches!(other_filetype, FileType::Folder) {
+                    return Some(other_file_in_dir);
+                } else {
+                    return None;
+                }
+            })
+    }
+
+    // Check if there is an album art in this folder too. If there is, then pick the one that is
+    // actually like a "cover.jpg". If this folder does not have this, check the parent folder.
+    let containing_folder = song_path.parent().expect("Can't get song parent");
+    let external_album_art_in_same_folder = get_images_in_folder(containing_folder)
+        .filter(|img_path| is_image_file_album_art(img_path))
+        .next();
+    if external_album_art_in_same_folder.is_some() {
+        return Song::new(
+            song_path.to_path_buf(),
+            source_library.to_path_buf(),
+            external_album_art_in_same_folder,
+        );
+    }
+
+    // if this folder does not have a folder.jpg/cover.png or whatever, check the parent directory.
+    let album_art_in_parent_folder = get_images_in_folder(
+        containing_folder
+            .parent()
+            .expect("Can't access parent's parent."),
+    )
+    .filter(|img_in_higher_folder| is_image_file_album_art(&img_in_higher_folder))
+    .next();
+    if album_art_in_parent_folder.is_some() {
+        return Song::new(
+            song_path.to_path_buf(),
+            source_library.to_path_buf(),
+            album_art_in_parent_folder,
+        );
+    }
+
+    // Guess there is no external album art for this one!
+    Song::new(song_path.to_path_buf(), source_library.to_path_buf(), None)
+}
+
+fn get_filenames_in_dir_recursively(vec: &mut Vec<PathBuf>, path: &Path) -> std::io::Result<()> {
+    if path.is_dir() {
+        let files_and_subdirs = fs::read_dir(path)?;
+        for file_or_subdir in fs::read_dir(path)? {
+            let file_or_subdir_full_path = file_or_subdir?.path();
+            if file_or_subdir_full_path.is_dir() {
+                // it is a dir, recurse.
+                get_filenames_in_dir_recursively(vec, path)?;
+            } else {
+                // It is a file, not a dir.
+                vec.push(file_or_subdir_full_path)
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Checks if the source music file has been changed since it has been transcoded.
 pub fn has_music_file_changed(
     song: &Song,
@@ -514,6 +647,9 @@ pub fn copy_dedicated_cover_art_for_song(
 
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum MusicLibraryError {
+    #[error("Could not generate a list of filenames in the source library.")]
+    ListFilenames(#[from] std::io::Error),
+
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
 

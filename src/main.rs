@@ -11,8 +11,8 @@ use hashing::{
 };
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_songs_in_source_library, sync_song, ArtStrategy,
-    ArtworkType, MusicFileType, MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_songs_in_library, find_songs_in_source_library,
+    sync_song, ArtStrategy, ArtworkType, MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -81,7 +81,7 @@ fn main() -> miette::Result<()> {
     }
 
     println!("Discovering files in {}", source_library.display());
-    let songs = find_songs_in_source_library(&source_library)?;
+    let songs = find_songs_in_library(&source_library)?;
     println!("Discovered {} songs.", songs.len());
     // Report if there are songs without album art.
     println!("Checking for songs without album art...");
