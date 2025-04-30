@@ -104,6 +104,7 @@ fn main() -> miette::Result<()> {
 
     // Load the results from the last hash.
     let previous_sync_db = try_read_records(&target_library);
+    let records_found = previous_sync_db.is_some();
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
     // with its own ffmpeg thread.
@@ -195,6 +196,12 @@ fn main() -> miette::Result<()> {
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
     if !cli.dry_run {
         print_library_size_reduction(&source_library, &target_library);
+    }
+
+    // If not writing any records, but there are records present, the synchronisation state in
+    // those is no longer up to date. Warn the user of this.
+    if cli.dont_save_records && records_found {
+        println!("Writing records is disabled, but there are already records present in the target directory (from a previous run?). This means that the next synchronisation will use this data, and not update everything. It is therefore recommended to delete the existing records file from the target library.")
     }
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by

@@ -51,3 +51,4 @@ Saving the state of the first file at the time of synchronising to a little file
 By default, such a file is written to the target directory and used in consecutive synchronisation runs (and updated).
 If the records are not present, either because you explicitly told the program not to write records, or because you deleted them manually, the fallback method is used instead.
 
+Do note that if you turn off writing records, but there are already records present, the next run might not accurately represent the state of synchronisation of the library.
