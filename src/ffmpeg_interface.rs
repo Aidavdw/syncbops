@@ -380,7 +380,7 @@ mod tests {
 
         let random_string = random_string::generate(16, "abcdefghijklmnopqrstuvwxyz");
         let target: PathBuf = format!(
-            "/tmp/bopsync/transcode_test_{:?}_{}.{}",
+            "/tmp/syncbops/transcode_test_{:?}_{}.{}",
             test_file, random_string, target_type
         )
         .into();

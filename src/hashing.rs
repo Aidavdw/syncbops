@@ -91,7 +91,7 @@ fn generate_potential_locations_for_database_file(target_library: &Path) -> Vec<
     let mut potential_dirs = Vec::new();
 
     // File in target library itself
-    const PREVIOUS_SYNC_DB_FILENAME: &str = "bopsync.dat";
+    const PREVIOUS_SYNC_DB_FILENAME: &str = "syncbops.dat";
     potential_dirs.push(target_library.join(PREVIOUS_SYNC_DB_FILENAME));
 
     // File in current working directory

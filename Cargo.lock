@@ -98,25 +98,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
 
 [[package]]
-name = "bopsync"
-version = "0.1.0"
-dependencies = [
- "clap",
- "dirs",
- "fs_extra",
- "indicatif",
- "itertools",
- "miette",
- "random-string",
- "rapidhash",
- "rayon",
- "serde",
- "serde_json",
- "thiserror 2.0.11",
- "walkdir",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -632,6 +613,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "syncbops"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "dirs",
+ "fs_extra",
+ "indicatif",
+ "itertools",
+ "miette",
+ "random-string",
+ "rapidhash",
+ "rayon",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.11",
+ "walkdir",
 ]
 
 [[package]]

@@ -629,7 +629,7 @@ mod tests {
         d.push("test_data/");
         let source_library: PathBuf = d;
         let target_library: PathBuf = format!(
-            "/tmp/bopsync/sync_test_lib_{:?}_to{:?}_{:?}_{:?}",
+            "/tmp/syncbops/sync_test_lib_{:?}_to{:?}_{:?}_{:?}",
             test_file, target_filetype, external_art, art_strategy
         )
         .into();

@@ -1,5 +1,5 @@
 [package]
-name = "bopsync"
+name = "syncbops"
 version = "0.1.0"
 edition = "2021"
 
