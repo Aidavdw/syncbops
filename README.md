@@ -1,5 +1,5 @@
 A tool to easily maintain a smaller-size copy of your music library, and keep it in sync with your main library.
-The obvious use case for this is to be able to have a large music library on your main PC, but keep a lower-quality (but smaller filesize) version of the same library on a mobile device. 
+Useful for keeping a compact version of your music library on a mobile device.
 
 # Features
 - Transcodes files to a smaller format

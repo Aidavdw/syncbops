@@ -2,6 +2,14 @@
 name = "syncbops"
 version = "1.0.0"
 edition = "2021"
+authors = ["Aida van de Wetering <aida@osphire.com>"]
+license = ""
+description = "A tool to easily maintain a smaller-size copy of your music library, and keep it in sync with your main library. Useful for keeping a compact version of your music library on a mobile device."
+readme = "README.md"
+homepage = "https://github.com/aidavdw/syncbops"
+repository = "https://github.com/aidavdw/syncbops"
+keywords = ["music", "audio", "file-management", "sync", "synchronisation", "portable","minification", "compression"]
+categories = ["compression", "multimedia::audio"]
 
 # Enabling link-time optimization can decrease binary size
 [profile.release]
