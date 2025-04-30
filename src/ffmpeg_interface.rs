@@ -442,12 +442,10 @@ mod tests {
         // Tags need to be identical. Album art might not be if set to embed.
         assert_eq!(source_md.title, target_md.title);
 
-        // // File size of the target file needs to be smaller than or equal to the original.
-        // assert!(
-        //     std::fs::metadata(&source).unwrap().len() >= std::fs::metadata(&target).unwrap().len()
-        // );
         // Bit rate of the target file needs to be smaller than or equal to the original.
-        // assert!(source_md.bitrate_kbps >= target_md.bitrate_kbps);
+        assert!(source_md.bitrate_kbps >= target_md.bitrate_kbps,
+            "source bitrate ({}) should be higher or equivalent to bitrate in generated file ({})- no upscaling!",
+            source_md.bitrate_kbps, target_md.bitrate_kbps);
 
         Ok(())
     }
@@ -473,7 +471,7 @@ mod tests {
             TestFile::Mp3CBRWithArt,
             true,
             None,
-            MusicFileType::Vorbis { quality: 8. },
+            MusicFileType::Vorbis { quality: 4. },
         )
     }
 
@@ -487,7 +485,7 @@ mod tests {
             test_file,
             embed_art,
             external_art_to_embed,
-            MusicFileType::Mp3VBR { quality: 3 },
+            MusicFileType::Mp3VBR { quality: 6 },
         )
     }
 
