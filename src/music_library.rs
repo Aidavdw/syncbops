@@ -392,26 +392,6 @@ pub fn has_music_file_changed(
     compare_metadata(song, target, desired_bitrate)
 }
 
-pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
-    let pb = ProgressBar::new(songs.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("[{elapsed}] [{bar:60.cyan/blue}] {pos}/{len} [ETA: {eta}] {msg}")
-            .unwrap()
-            .progress_chars("#>-"),
-    );
-    let yee = songs
-        .par_iter()
-        .progress_with(pb.clone())
-        .with_finish(indicatif::ProgressFinish::AndLeave)
-        .filter(|song| {
-            pb.set_message(format!("{}", song.absolute_path.display()));
-            song.has_artwork() == ArtworkType::None
-        })
-        .collect::<Vec<_>>();
-    yee
-}
-
 /// Where to put the synchronised copy
 pub fn get_shadow_filename(
     library_relative_path: &Path,

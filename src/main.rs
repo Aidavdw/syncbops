@@ -11,8 +11,8 @@ use hashing::{
 };
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_songs_in_source_library, songs_without_album_art,
-    sync_song, ArtStrategy, MusicFileType, MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_songs_in_source_library, sync_song, ArtStrategy,
+    ArtworkType, MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
@@ -189,6 +189,14 @@ fn main() -> miette::Result<()> {
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
+}
+
+pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
+    let yee = songs
+        .iter()
+        .filter(|song| song.has_artwork() == ArtworkType::None)
+        .collect::<Vec<_>>();
+    yee
 }
 
 fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: bool) -> String {
