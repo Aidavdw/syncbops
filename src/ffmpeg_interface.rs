@@ -52,13 +52,20 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
         serde_json::from_str(&ffprobe_json_output).map_err(|_| FfmpegError::JsonMetadata)?;
     dbg!(&parsed);
 
-    // The first stream must be the audio.
-    let audio_stream: &JsonValue = &parsed["streams"][0];
-
-    let JsonValue::String(first_stream) = &audio_stream["codec_type"] else {
-        return Err(FfmpegError::JsonMetadata);
-    };
-    assert!(first_stream == "audio");
+    // There must be only one audio stream here, but there might be more video streams (different
+    // art).
+    // Usually, the first stream is the audio stream, but it might not be.
+    let audio_stream = &parsed["streams"]
+        .as_array()
+        .expect("streams is not an array?")
+        .iter()
+        .find(|stream| {
+            let JsonValue::String(first_stream) = &stream["codec_type"] else {
+                return false;
+            };
+            first_stream == "audio"
+        })
+        .expect("File does not have an audio stream.");
 
     // If it is given as a string, turn it into a number.
     let Some(bitrate_kbps) = match &audio_stream["bit_rate"] {
@@ -163,6 +170,10 @@ pub fn transcode_song(
         .arg("0")
         .arg("-map_metadata")
         .arg("0:s:0");
+
+    // TODO: For some reason, when transcoding MP3 to Ogg, it really wants to put the video track
+    // first. At least, that is what ffprobe reports. I don't think this is a problem, but maybe
+    // this should be fixed.
 
     // More metadata mapping operations:
     match target_type {
@@ -274,63 +285,42 @@ mod tests {
     use crate::{ffmpeg_interface::SongMetaData, music_library::MusicFileType};
     use std::path::PathBuf;
 
-    fn mp3_with_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/with_art.mp3");
-        d
+    #[derive(Debug, Clone)]
+    enum TestFile {
+        Mp3CBRWithArt,
+        Mp3CBRWithoutArt,
+        FlacWithArt,
+        FlacWithoutArt,
+        M4aWithArt,
+        M4aWithoutArt,
+        OggWithArt,
+        OggWithoutArt,
+        Jpg600,
     }
 
-    fn mp3_without_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/no_art.mp3");
-        d
-    }
-
-    fn flac_with_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/with_art.flac");
-        d
-    }
-
-    fn flac_without_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/no_art.flac");
-        d
-    }
-
-    fn m4a_with_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/with_art.m4a");
-        d
-    }
-
-    fn m4a_without_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/no_art.m4a");
-        d
-    }
-
-    fn ogg_with_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/with_art.ogg");
-        d
-    }
-
-    fn ogg_without_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/no_art.ogg");
-        d
-    }
-
-    fn external_art() -> Option<PathBuf> {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/cover_art.jpg");
-        Some(d)
+    impl TestFile {
+        pub fn path(&self) -> PathBuf {
+            let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            d.push("test_data");
+            let a = match self {
+                TestFile::Mp3CBRWithArt => "with_art.mp3",
+                TestFile::Mp3CBRWithoutArt => "no_art.mp3",
+                TestFile::FlacWithArt => "with_art.flac",
+                TestFile::FlacWithoutArt => "no_art.flac",
+                TestFile::M4aWithArt => "with_art.m4a",
+                TestFile::M4aWithoutArt => "no_art.m4a",
+                TestFile::OggWithArt => "with_art.ogg",
+                TestFile::OggWithoutArt => "no_art.ogg",
+                TestFile::Jpg600 => "cover_art.jpg",
+            };
+            d.push(a);
+            d
+        }
     }
 
     #[test]
     fn metadata_mp3_with_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&mp3_with_art())?;
+        let md = SongMetaData::parse_file(&TestFile::Mp3CBRWithArt.path())?;
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("mp3 with art".to_string()));
@@ -340,7 +330,7 @@ mod tests {
 
     #[test]
     fn metadata_mp3_without_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&mp3_without_art())?;
+        let md = SongMetaData::parse_file(&TestFile::Mp3CBRWithoutArt.path())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("mp3 without art".to_string()));
@@ -350,7 +340,7 @@ mod tests {
 
     #[test]
     fn metadata_flac_with_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&flac_with_art())?;
+        let md = SongMetaData::parse_file(&TestFile::FlacWithArt.path())?;
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("flac with art".to_string()));
@@ -361,7 +351,7 @@ mod tests {
 
     #[test]
     fn metadata_flac_without_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&flac_without_art())?;
+        let md = SongMetaData::parse_file(&TestFile::FlacWithoutArt.path())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("Flac without art".to_string()));
@@ -371,7 +361,7 @@ mod tests {
 
     #[test]
     fn metadata_ogg_with_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&ogg_with_art())?;
+        let md = SongMetaData::parse_file(&TestFile::OggWithArt.path())?;
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("ogg with art".to_string()));
@@ -381,7 +371,7 @@ mod tests {
 
     #[test]
     fn metadata_ogg_without_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&ogg_without_art())?;
+        let md = SongMetaData::parse_file(&TestFile::OggWithoutArt.path())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("vorbis without art".to_string()));
@@ -391,7 +381,7 @@ mod tests {
 
     #[test]
     fn metadata_m4a_with_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&m4a_with_art())?;
+        let md = SongMetaData::parse_file(&TestFile::M4aWithArt.path())?;
         dbg!(&md);
         assert!(md.has_embedded_album_art);
         assert!(md.title == Some("m4a with art".to_string()));
@@ -401,7 +391,7 @@ mod tests {
 
     #[test]
     fn metadata_m4a_without_art() -> miette::Result<()> {
-        let md = SongMetaData::parse_file(&m4a_without_art())?;
+        let md = SongMetaData::parse_file(&TestFile::M4aWithoutArt.path())?;
         dbg!(&md);
         assert!(!md.has_embedded_album_art);
         assert!(md.title == Some("m4a without art".to_string()));
@@ -409,16 +399,22 @@ mod tests {
         Ok(())
     }
 
+    // Convenience function to see if file transcoding actually works as intended.
     fn transcode_file_test(
-        source: PathBuf,
+        test_file: TestFile,
         embed_art: bool,
-        external_art_to_embed: Option<PathBuf>,
+        external_art_to_embed: Option<TestFile>,
         target_type: MusicFileType,
     ) -> miette::Result<()> {
         use super::transcode_song;
+        let source = test_file.path();
+
         let random_string = random_string::generate(16, "abcdefghijklmnopqrstuvwxyz");
-        let target: PathBuf =
-            format!("/tmp/transcode_test_{}.{}", random_string, target_type).into();
+        let target: PathBuf = format!(
+            "/tmp/bopsync/transcode_test_{:?}_{}.{}",
+            test_file, random_string, target_type
+        )
+        .into();
         println!("Using {}", target.display());
         assert!(
             !std::fs::exists(&target).unwrap(),
@@ -432,35 +428,63 @@ mod tests {
             &target,
             target_type,
             embed_art,
-            external_art_to_embed.as_deref(),
+            external_art_to_embed.clone().map(|tf| tf.path()).as_deref(),
         )?;
         assert!(std::fs::exists(&target).unwrap());
         let source_md = SongMetaData::parse_file(&source)?;
         let target_md = SongMetaData::parse_file(&target)?;
+
+        // Album art needs to be the set or removed
         if source_md.has_embedded_album_art || external_art_to_embed.is_some() {
             assert_eq!(target_md.has_embedded_album_art, embed_art)
         }
+
+        // Tags need to be identical. Album art might not be if set to embed.
+        assert_eq!(source_md.title, target_md.title);
+
+        // // File size of the target file needs to be smaller than or equal to the original.
+        // assert!(
+        //     std::fs::metadata(&source).unwrap().len() >= std::fs::metadata(&target).unwrap().len()
+        // );
+        // Bit rate of the target file needs to be smaller than or equal to the original.
+        // assert!(source_md.bitrate_kbps >= target_md.bitrate_kbps);
+
         Ok(())
+    }
+
+    /// Setting up a test to transcode into mp3 vbr
+    fn transcode_to_mp3_cbr_test(
+        test_file: TestFile,
+        embed_art: bool,
+        external_art_to_embed: Option<TestFile>,
+    ) -> miette::Result<()> {
+        transcode_file_test(
+            test_file,
+            embed_art,
+            external_art_to_embed,
+            MusicFileType::Mp3CBR { bitrate: 80 },
+        )
     }
 
     #[test]
     /// Keep embedded art
     fn mp3_to_ogg_embedded_art() -> miette::Result<()> {
         transcode_file_test(
-            mp3_with_art(),
+            TestFile::Mp3CBRWithArt,
             true,
             None,
             MusicFileType::Vorbis { quality: 8. },
         )
     }
 
+    /// Setting up a test to transcode into mp3 vbr
     fn transcode_to_mp3_vbr_test(
-        source: PathBuf,
+        test_file: TestFile,
         embed_art: bool,
-        external_art_to_embed: Option<PathBuf>,
+        external_art_to_embed: Option<TestFile>,
     ) -> miette::Result<()> {
         transcode_file_test(
-            source,
+            test_file,
             embed_art,
             external_art_to_embed,
             MusicFileType::Mp3VBR { quality: 3 },
@@ -470,168 +494,168 @@ mod tests {
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn mp3_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_without_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn mp3_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_with_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn mp3_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_with_art(), false, None)
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, false, None)
     }
 
     #[test]
     /// drop external art
     fn mp3_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed external art
     fn mp3_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn mp3_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(mp3_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn ogg_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_without_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn ogg_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_with_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::OggWithArt, true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn ogg_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_with_art(), false, None)
+        transcode_to_mp3_vbr_test(TestFile::OggWithArt, false, None)
     }
 
     #[test]
     /// drop external art
     fn ogg_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed external art
     fn ogg_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn ogg_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn ogg_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(ogg_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn flac_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_without_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn flac_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_with_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn flac_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_with_art(), false, None)
+        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, false, None)
     }
 
     #[test]
     /// drop external art
     fn flac_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed external art
     fn flac_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn flac_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn flac_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(flac_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn m4a_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_without_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, true, None)
     }
 
     #[test]
     /// Keep embedded art
     fn m4a_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_with_art(), true, None)
+        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, true, None)
     }
 
     #[test]
     /// drop embedded album art
     fn m4a_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_with_art(), false, None)
+        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, None)
     }
 
     #[test]
     /// drop external art
     fn m4a_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_without_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed external art
     fn m4a_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_without_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn m4a_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_with_art(), true, external_art())
+        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
     }
 
     #[test]
     /// embed, supplied are both external art and already embedded.
     fn m4a_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(m4a_with_art(), false, external_art())
+        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
     }
 }
