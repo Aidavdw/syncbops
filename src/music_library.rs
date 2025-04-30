@@ -375,14 +375,13 @@ fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, Mu
     fn get_images_in_folder(path: &Path) -> impl Iterator<Item = PathBuf> {
         fs::read_dir(path)
             .expect("Can't read parent dir")
-            .into_iter()
             .filter_map(|dir_entry| {
                 let other_file_in_dir = dir_entry.ok()?.path();
                 let other_filetype = identify_file_type(&other_file_in_dir)?;
                 if matches!(other_filetype, FileType::Folder) {
-                    return Some(other_file_in_dir);
+                    Some(other_file_in_dir)
                 } else {
-                    return None;
+                    None
                 }
             })
     }
@@ -390,9 +389,8 @@ fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, Mu
     // Check if there is an album art in this folder too. If there is, then pick the one that is
     // actually like a "cover.jpg". If this folder does not have this, check the parent folder.
     let containing_folder = song_path.parent().expect("Can't get song parent");
-    let external_album_art_in_same_folder = get_images_in_folder(containing_folder)
-        .filter(|img_path| is_image_file_album_art(img_path))
-        .next();
+    let external_album_art_in_same_folder =
+        get_images_in_folder(containing_folder).find(|img_path| is_image_file_album_art(img_path));
     if external_album_art_in_same_folder.is_some() {
         return Song::new(
             song_path.to_path_buf(),
@@ -407,8 +405,7 @@ fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, Mu
             .parent()
             .expect("Can't access parent's parent."),
     )
-    .filter(|img_in_higher_folder| is_image_file_album_art(&img_in_higher_folder))
-    .next();
+    .find(|img_in_higher_folder| is_image_file_album_art(img_in_higher_folder));
     if album_art_in_parent_folder.is_some() {
         return Song::new(
             song_path.to_path_buf(),
