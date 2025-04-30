@@ -423,7 +423,7 @@ pub fn get_shadow_filename(
 }
 
 /// How to handle album art
-#[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
+#[derive(Clone, Copy, PartialEq, clap::ValueEnum, Debug)]
 pub enum ArtStrategy {
     /// Remove all embedded album art, and don't copy album art files.
     None,
@@ -558,39 +558,15 @@ mod tests {
     use super::songs_without_album_art;
     use crate::{
         ffmpeg_interface::SongMetaData,
-        hashing::PreviousSyncDb,
         music_library::{
             get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, MusicFileType,
             UpdateType,
         },
         song::Song,
+        test_data::TestFile,
     };
     use itertools::Itertools;
     use std::path::PathBuf;
-
-    fn with_embedded_album_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/with_art.mp3");
-        assert!(
-            d.exists(),
-            "test song with embedded album art does not exist."
-        );
-        d
-    }
-
-    fn without_art() -> PathBuf {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/no_art.mp3");
-        assert!(d.exists(), "test song without album art does not exist.");
-        d
-    }
-
-    fn external_art() -> Option<PathBuf> {
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/cover_art.jpg");
-        assert!(d.exists(), "test song with embedded art does not exist.");
-        Some(d)
-    }
 
     /// Shared between all tests for has_music_file_changed
     fn construct_has_music_file_changed(orig_name: &str, modified_name: &str) -> UpdateType {
@@ -646,8 +622,9 @@ mod tests {
     /// convenience function to simulate adding a new song.
     /// Used for checking if the resulting som actually has the data that is requested of it.
     fn sync_new_song_test(
-        identifier: &str,
-        song: Song,
+        test_file: TestFile,
+        target_filetype: MusicFileType,
+        external_art: Option<TestFile>,
         art_strategy: ArtStrategy,
     ) -> miette::Result<()> {
         use super::sync_song;
@@ -655,15 +632,20 @@ mod tests {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_data/");
         let source_library: PathBuf = d;
-        let target_library: PathBuf = format!("/tmp/bopsync/target_library_{}", identifier).into();
+        let target_library: PathBuf = format!(
+            "/tmp/bopsync/sync_test_lib_{:?}_to{:?}_{:?}_{:?}",
+            test_file, target_filetype, external_art, art_strategy
+        )
+        .into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
-        let target_filetype = MusicFileType::Mp3CBR { bitrate: 60 };
-        let library_relative_path = library_relative_path(&song.absolute_path, &source_library);
+        let library_relative_path = library_relative_path(&test_file.path(), &source_library);
         let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
         let _ = std::fs::remove_file(&target);
         assert!(!target.exists());
 
+        // let target_filetype = MusicFileType::Mp3CBR { bitrate: 60 };
+        let song = Song::new_debug(test_file.path(), external_art.map(|tf| tf.path()))?;
         let updated_record = sync_song(
             &song,
             &target_library,
@@ -729,8 +711,9 @@ mod tests {
     /// Song with embedded album art, no external, art strategy = none.
     fn sync_song_artstrat_none_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_none/embedded",
-            Song::new_debug(with_embedded_album_art(), None)?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::None,
         )
     }
@@ -739,8 +722,9 @@ mod tests {
     /// Song with external art only, art strategy = none
     fn sync_song_artstrat_none_external_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_none/external",
-            Song::new_debug(without_art(), external_art())?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::None,
         )
     }
@@ -749,18 +733,20 @@ mod tests {
     /// Song with no art at all, art strategy = none
     fn sync_song_artstrat_none_no_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_none/no-art",
-            Song::new_debug(without_art(), None)?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::None,
         )
     }
 
     #[test]
-    /// Song with both embedded and external art, art strategy = none.
+    /// embedded and external art, art strategy = no.
     fn sync_song_artstrat_none_both() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_none/both",
-            Song::new_debug(with_embedded_album_art(), external_art())?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::None,
         )
     }
@@ -769,11 +755,12 @@ mod tests {
     // ART STRATEGY = EMBED ALL
 
     #[test]
-    /// Song with embedded album art, no external, art strategy = none.
+    /// album art, no external, art strategy = no.
     fn sync_song_artstrat_embed_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_embed/embedded",
-            Song::new_debug(with_embedded_album_art(), None)?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::EmbedAll,
         )
     }
@@ -782,8 +769,9 @@ mod tests {
     /// Song with external art only, art strategy = none
     fn sync_song_artstrat_embed_external_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_embed/external",
-            Song::new_debug(without_art(), external_art())?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::EmbedAll,
         )
     }
@@ -792,8 +780,9 @@ mod tests {
     /// Song with no art at all, art strategy = none
     fn sync_song_artstrat_embed_no_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_embed/no-art",
-            Song::new_debug(without_art(), None)?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::EmbedAll,
         )
     }
@@ -802,8 +791,9 @@ mod tests {
     /// Song with both embedded and external art, art strategy = none.
     fn sync_song_artstrat_embed_both() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_embed/both",
-            Song::new_debug(with_embedded_album_art(), external_art())?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::EmbedAll,
         )
     }
@@ -815,8 +805,9 @@ mod tests {
     /// Song with embedded album art, no external, art strategy = prefer file.
     fn sync_song_artstrat_prefer_file_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_prefer_file/embedded",
-            Song::new_debug(with_embedded_album_art(), None)?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::PreferFile,
         )
     }
@@ -825,8 +816,9 @@ mod tests {
     /// Song with external art only, art strategy = prefer_file
     fn sync_song_artstrat_prefer_file_external_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_prefer_file/external",
-            Song::new_debug(without_art(), external_art())?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::PreferFile,
         )
     }
@@ -835,8 +827,9 @@ mod tests {
     /// Song with no art at all, art strategy = prefer_file
     fn sync_song_artstrat_prefer_file_no_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_prefer_file/no-art",
-            Song::new_debug(without_art(), None)?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::PreferFile,
         )
     }
@@ -845,8 +838,9 @@ mod tests {
     /// Song with both embedded and external art, art strategy = prefer_file.
     fn sync_song_artstrat_prefer_file_both() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_prefer_file/both",
-            Song::new_debug(with_embedded_album_art(), external_art())?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::PreferFile,
         )
     }
@@ -858,8 +852,9 @@ mod tests {
     /// Song with embedded album art, no external, art strategy = file_only.
     fn sync_song_artstrat_file_only_embedded_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_file_only/embedded",
-            Song::new_debug(with_embedded_album_art(), None)?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::FileOnly,
         )
     }
@@ -868,8 +863,9 @@ mod tests {
     /// Song with external art only, art strategy = file_only
     fn sync_song_artstrat_file_only_external_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_file_only/external",
-            Song::new_debug(without_art(), external_art())?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::FileOnly,
         )
     }
@@ -878,8 +874,9 @@ mod tests {
     /// Song with no art at all, art strategy = file_only
     fn sync_song_artstrat_file_only_no_art() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_file_only/no-art",
-            Song::new_debug(without_art(), None)?,
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            None,
             ArtStrategy::FileOnly,
         )
     }
@@ -888,8 +885,9 @@ mod tests {
     /// Song with both embedded and external art, art strategy = file_only.
     fn sync_song_artstrat_file_only_both() -> miette::Result<()> {
         sync_new_song_test(
-            "artstrat_file_only/both",
-            Song::new_debug(with_embedded_album_art(), external_art())?,
+            TestFile::Mp3CBRWithArt,
+            MusicFileType::Mp3CBR { bitrate: 60 },
+            Some(TestFile::Jpg600),
             ArtStrategy::FileOnly,
         )
     }
@@ -897,17 +895,17 @@ mod tests {
     // END ART STRATEGY = FILE_ONLY
 
     fn mock_song(embedded_art: bool, external_album_art: bool) -> Song {
-        let path = if embedded_art {
-            with_embedded_album_art()
+        let test_file = if embedded_art {
+            TestFile::Mp3CBRWithArt
         } else {
-            without_art()
+            TestFile::Mp3CBRWithoutArt
         };
         let external_album_art = if external_album_art {
-            external_art()
+            Some(TestFile::Jpg600)
         } else {
             None
         };
-        Song::new_debug(path, external_album_art).unwrap()
+        Song::new_debug(test_file.path(), external_album_art.map(|tf| tf.path())).unwrap()
     }
 
     #[test]
