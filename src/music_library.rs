@@ -218,94 +218,6 @@ fn is_image_file_album_art(path: &Path) -> bool {
     stem_is_allowed && has_right_extension
 }
 
-//
-fn identify_entries_in_folder(
-    path: &Path,
-) -> Result<impl Iterator<Item = (PathBuf, FileType)> + '_, MusicLibraryError> {
-    if !path.is_dir() {
-        return Err(MusicLibraryError::NotADirectory {
-            path: path.to_path_buf(),
-        });
-    }
-    let dir = fs::read_dir(path).map_err(|_| MusicLibraryError::CouldNotProcessDir {
-        path: path.to_path_buf(),
-    })?;
-    let files_and_types = dir
-        .into_iter()
-        // Remove un-parseable items, and identify their types.
-        .filter_map(|entry| {
-            let Ok(valid_file_or_folder) = entry else {
-                eprintln!("Unable to process an entry in folder {}", path.display(),);
-                return None;
-            };
-            let path = valid_file_or_folder.path();
-            let Some(filetype) = identify_file_type(&path) else {
-                eprintln!("Could not identify file {}", path.display(),);
-                return None;
-            };
-            Some((path, filetype))
-        });
-    Ok(files_and_types)
-}
-
-pub fn find_songs_in_source_library(
-    source_library_path: &Path,
-) -> Result<Vec<Song>, MusicLibraryError> {
-    recursively_find_songs_in_directory_and_subdirectories(source_library_path, source_library_path)
-}
-
-fn recursively_find_songs_in_directory_and_subdirectories(
-    relative_root: &Path,
-    path: &Path,
-) -> Result<Vec<Song>, MusicLibraryError> {
-    // Iterate through the folders. If there is a music file here, then this should be an
-    // album.
-    // if there are no music files here, then go some level deeper, because there might be
-    // music in a sub-folder.
-    // If there are no music files, and there are also no sub-folders, then ignore this foledr
-    // and continue with the next one.
-
-    let files_and_folders_in_dir = identify_entries_in_folder(path)?.collect_vec();
-
-    // See if this folder contains album art
-    let folder_art = files_and_folders_in_dir
-        .iter()
-        .filter(|(_, filetype)| *filetype == FileType::Art)
-        .map(|(path, _)| path)
-        .filter(|image_path| is_image_file_album_art(image_path))
-        .next()
-        .cloned();
-
-    // If there are sub-directories, recurse into them.
-    let songs_in_sub_directories = files_and_folders_in_dir
-        .iter()
-        .filter(|(_, filetype)| *filetype == FileType::Folder)
-        .filter_map(move |(path, _)| {
-            recursively_find_songs_in_directory_and_subdirectories(relative_root, &path).ok()
-        })
-        .flatten();
-
-    // Handle all song files in this dir
-    let songs = files_and_folders_in_dir
-        .iter()
-        .filter(|(_, filetype)| *filetype == FileType::Music)
-        .filter_map(|(path, _)| {
-            // If there is an error with parsing this file to a song, then just ignore it, but do
-            // print why it failed.
-            Song::new(
-                path.clone(),
-                relative_root.to_path_buf(),
-                folder_art.clone(),
-            )
-            .map_err(|e| eprintln!("{e}"))
-            .ok()
-        });
-    //
-    let songs_in_this_dir_and_subdirs = songs.chain(songs_in_sub_directories).collect_vec();
-
-    Ok(songs_in_this_dir_and_subdirs)
-}
-
 pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibraryError> {
     let filenames = WalkDir::new(library_root)
         .into_iter()
@@ -416,23 +328,6 @@ fn process_song_file(song_path: &Path, source_library: &Path) -> Result<Song, Mu
 
     // Guess there is no external album art for this one!
     Song::new(song_path.to_path_buf(), source_library.to_path_buf(), None)
-}
-
-fn get_filenames_in_dir_recursively(vec: &mut Vec<PathBuf>, path: &Path) -> std::io::Result<()> {
-    if path.is_dir() {
-        let files_and_subdirs = fs::read_dir(path)?;
-        for file_or_subdir in fs::read_dir(path)? {
-            let file_or_subdir_full_path = file_or_subdir?.path();
-            if file_or_subdir_full_path.is_dir() {
-                // it is a dir, recurse.
-                get_filenames_in_dir_recursively(vec, path)?;
-            } else {
-                // It is a file, not a dir.
-                vec.push(file_or_subdir_full_path)
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Checks if the source music file has been changed since it has been transcoded.
@@ -677,7 +572,6 @@ mod tests {
         song::Song,
         test_data::TestFile,
     };
-    use itertools::Itertools;
     use std::path::PathBuf;
 
     /// Shared between all tests for has_music_file_changed

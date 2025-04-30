@@ -5,14 +5,11 @@ mod song;
 #[cfg(test)]
 mod test_data;
 use clap::{arg, Parser};
-use hashing::{
-    save_record_to_previous_sync_db, try_read_records, try_write_records, PreviousSyncDb,
-    SyncRecord,
-};
+use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_songs_in_library, find_songs_in_source_library,
-    sync_song, ArtStrategy, ArtworkType, MusicFileType, MusicLibraryError, UpdateType,
+    copy_dedicated_cover_art_for_song, find_songs_in_library, sync_song, ArtStrategy, ArtworkType,
+    MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
