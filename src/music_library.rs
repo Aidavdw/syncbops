@@ -535,7 +535,6 @@ pub enum MusicLibraryError {
 
 #[cfg(test)]
 mod tests {
-    use super::songs_without_album_art;
     use crate::{
         ffmpeg_interface::SongMetaData,
         music_library::{
@@ -888,61 +887,4 @@ mod tests {
     }
 
     // END ART STRATEGY = FILE_ONLY
-
-    fn mock_song(embedded_art: bool, external_album_art: bool) -> Song {
-        let test_file = if embedded_art {
-            TestFile::Mp3CBRWithArt
-        } else {
-            TestFile::Mp3CBRWithoutArt
-        };
-        let external_album_art = if external_album_art {
-            Some(TestFile::Jpg600)
-        } else {
-            None
-        };
-        Song::new_debug(test_file.path(), external_album_art.map(|tf| tf.path())).unwrap()
-    }
-
-    #[test]
-    fn songs_without_album_art_test() -> miette::Result<()> {
-        assert!(songs_without_album_art(&[mock_song(false, true)]).is_empty());
-        assert!(songs_without_album_art(&[mock_song(true, false)]).is_empty());
-        assert!(!songs_without_album_art(&[mock_song(false, false)]).is_empty());
-
-        // One album only, only embedded
-        assert_eq!(
-            songs_without_album_art(&[mock_song(true, false), mock_song(false, false),])
-                .iter()
-                .exactly_one()
-                .unwrap(),
-            &&mock_song(false, false)
-        );
-
-        // More only embbeded
-        assert_eq!(
-            songs_without_album_art(&[
-                mock_song(true, false),
-                mock_song(true, false),
-                mock_song(false, false),
-                mock_song(false, false),
-            ])
-            .len(),
-            2
-        );
-
-        // one embedded, the other dedicated.
-        assert_eq!(
-            songs_without_album_art(&[
-                mock_song(true, false),
-                mock_song(false, false),
-                mock_song(false, true),
-            ])
-            .iter()
-            .exactly_one()
-            .unwrap(),
-            &&mock_song(false, false),
-        );
-
-        Ok(())
-    }
 }

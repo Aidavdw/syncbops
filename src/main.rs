@@ -149,19 +149,30 @@ fn main() -> miette::Result<()> {
 
     // Go over all the dedicated album art.
     // If there is a dedicated art file for the music file, add it. If it already exists, it is probably already added by another file
-    println!("Checking and copying external cover art...");
-    let new_cover_arts = songs
-        .iter()
-        .map(|song| {
-            copy_dedicated_cover_art_for_song(song, &source_library, &target_library, cli.dry_run)
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .iter()
-        .filter_map(|o| o.to_owned())
-        .collect::<Vec<_>>();
+    let new_cover_arts = if !cli.dry_run {
+        println!("Checking and copying external cover art...");
+        Some(
+            songs
+                .iter()
+                .map(|song| {
+                    copy_dedicated_cover_art_for_song(
+                        song,
+                        &source_library,
+                        &target_library,
+                        cli.dry_run,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .iter()
+                .filter_map(|o| o.to_owned())
+                .collect::<Vec<_>>(),
+        )
+    } else {
+        None
+    };
 
     // Update the PreviousSyncDB with the newly added items.
-    if cli.save_records {
+    if cli.save_records && !cli.dry_run {
         println!("Writing new records so the next sync can be done faster");
         // Carry over any previous records (files that are not touched retain their original data).
         let mut new_records = previous_sync_db.unwrap_or_default();
@@ -184,8 +195,9 @@ fn main() -> miette::Result<()> {
     }
 
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
-    print_library_size_reduction(&source_library, &target_library);
-
+    if !cli.dry_run {
+        print_library_size_reduction(&source_library, &target_library);
+    }
     Ok(())
     // TODO: Separately search for "albumname.jpg" everywhere. Match this to the albums by
     // reading their tags, and link it if the album does not yet have art set.
@@ -199,7 +211,11 @@ pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
     yee
 }
 
-fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: bool) -> String {
+fn summarize(
+    sync_results: SyncResults,
+    new_cover_arts: Option<Vec<PathBuf>>,
+    verbose: bool,
+) -> String {
     // Thif function should use an owned SyncResults, because otherwise you can't get nice
     // miette::report
     let mut summary = String::with_capacity(4000);
@@ -253,7 +269,9 @@ fn summarize(sync_results: SyncResults, new_cover_arts: Vec<PathBuf>, verbose: b
     summary.push_str(&format!("Changed songs (overwritten): {}\n", n_overwritten));
     summary.push_str(&format!("Re-added missing: {}\n", n_missing_target));
     summary.push_str(&format!("Copied (not transcoded): {}\n", n_copied));
-    summary.push_str(&format!("New album art: {}\n", new_cover_arts.len()));
+    if let Some(art_files) = new_cover_arts {
+        summary.push_str(&format!("New album art: {}\n", art_files.len()));
+    }
     if n_err == 0 {
         summary.push_str("No Errors :D\n");
     } else {
