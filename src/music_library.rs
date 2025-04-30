@@ -649,19 +649,31 @@ mod tests {
         let updated_record = sync_song(
             &song,
             &target_library,
-            target_filetype,
+            target_filetype.clone(),
             art_strategy,
             None,
             false,
             false,
         )?;
-
-        // TODO: Test other update types separately.
-        assert_eq!(
-            updated_record.update_type.unwrap(),
-            UpdateType::NewTranscode
-        );
         let output_metadata = SongMetaData::parse_file(&target)?;
+
+        // The whole point of this program is to save space. The transcoded file should be
+        // smaller, while retaining detail. Should not do any transcoding where filesize
+        // increases.
+        // Bit rate of the target file needs to be smaller than or equal to the original.
+        assert!(song.metadata.bitrate_kbps >= output_metadata.bitrate_kbps,
+            "source bitrate ({}) should be higher or equivalent to bitrate in generated file ({})- no upscaling!",
+            song.metadata.bitrate_kbps, output_metadata.bitrate_kbps);
+        if target_filetype.equivalent_bitrate() > song.metadata.bitrate_kbps {
+            assert_eq!(updated_record.update_type.unwrap(), UpdateType::Copied)
+        } else {
+            assert_eq!(
+                updated_record.update_type.unwrap(),
+                UpdateType::NewTranscode
+            );
+        }
+
+        // Now, let's see if the art is what we expected it to be.
         match art_strategy {
             ArtStrategy::None => assert!(
                 !output_metadata.has_embedded_album_art,
@@ -694,15 +706,18 @@ mod tests {
             }
         }
 
-        // The whole point of this program is to save space. The transcoded file should be
-        // smaller, while retaining detail. Should not do any transcoding where filesize
-        // increases.
-        // Bit rate of the target file needs to be smaller than or equal to the original.
-        assert!(song.metadata.bitrate_kbps >= output_metadata.bitrate_kbps,
-            "source bitrate ({}) should be higher or equivalent to bitrate in generated file ({})- no upscaling!",
-            song.metadata.bitrate_kbps, output_metadata.bitrate_kbps);
-
         Ok(())
+    }
+
+    #[test]
+    /// Trying to convert to a higher bitrate means the thing should just be copied over.
+    fn sync_mp3_to_mp3_with_higher_bitrate() -> miette::Result<()> {
+        sync_new_song_test(
+            TestFile::Mp3CBRWithoutArt,
+            MusicFileType::Mp3CBR { bitrate: 320 },
+            None,
+            ArtStrategy::None,
+        )
     }
 
     // ART STRATEGY = NONE
