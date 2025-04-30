@@ -655,7 +655,7 @@ mod tests {
         let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         d.push("test_data/");
         let source_library: PathBuf = d;
-        let target_library: PathBuf = format!("/tmp/target_library_{}", identifier).into();
+        let target_library: PathBuf = format!("/tmp/bopsync/target_library_{}", identifier).into();
         let _ = std::fs::create_dir(&target_library);
         // Delete anything that's already there, because we wanna test it if it's a new file.
         let target_filetype = MusicFileType::Mp3CBR { bitrate: 60 };
@@ -674,22 +674,22 @@ mod tests {
             false,
         )?;
 
+        // TODO: Test other update types separately.
         assert_eq!(
             updated_record.update_type.unwrap(),
             UpdateType::NewTranscode
         );
-        // Don't care about external album art; that's not the responsibililty of sync_song
-        let output = Song::new_debug(target, None)?;
+        let output_metadata = SongMetaData::parse_file(&target)?;
         match art_strategy {
             ArtStrategy::None => assert!(
-                !output.metadata.has_embedded_album_art,
+                !output_metadata.has_embedded_album_art,
                 "Art strategy is to have no artwork yet there is embedded artwork."
             ),
             ArtStrategy::EmbedAll => {
                 // Can't have any artwork if there never was any.
                 if song.has_artwork() != ArtworkType::None {
                     assert!(
-                        output.metadata.has_embedded_album_art,
+                        output_metadata.has_embedded_album_art,
                         "ArtStrategy::EmbedAll, yet no embedded artwork.."
                     )
                 }
@@ -697,22 +697,29 @@ mod tests {
             ArtStrategy::PreferFile => {
                 if song.external_album_art.is_some() {
                     assert!(
-                !output.metadata.has_embedded_album_art,
+                !output_metadata.has_embedded_album_art,
                         "If song has dedicated artwork, it should copy it over with this ArtStrategy, and not embed it."
                     )
                 } else if song.metadata.has_embedded_album_art {
-                    assert!(output.metadata.has_embedded_album_art , "Even though not preferred option, should still retain artwork that was already embedded")
+                    assert!(output_metadata.has_embedded_album_art , "Even though not preferred option, should still retain artwork that was already embedded")
                 }
             }
             ArtStrategy::FileOnly => {
                 assert!(
-                    !output.metadata.has_embedded_album_art,
+                    !output_metadata.has_embedded_album_art,
                     "If File Only, should not have any embedded artwork."
                 )
             }
         }
 
-        // The it should not be overwritten if
+        // The whole point of this program is to save space. The transcoded file should be
+        // smaller, while retaining detail. Should not do any transcoding where filesize
+        // increases.
+        // Bit rate of the target file needs to be smaller than or equal to the original.
+        assert!(song.metadata.bitrate_kbps >= output_metadata.bitrate_kbps,
+            "source bitrate ({}) should be higher or equivalent to bitrate in generated file ({})- no upscaling!",
+            song.metadata.bitrate_kbps, output_metadata.bitrate_kbps);
+
         Ok(())
     }
 

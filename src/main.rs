@@ -2,6 +2,8 @@ mod ffmpeg_interface;
 mod hashing;
 mod music_library;
 mod song;
+#[cfg(test)]
+mod test_data;
 use clap::{arg, Parser};
 use hashing::{
     save_record_to_previous_sync_db, try_read_records, try_write_records, PreviousSyncDb,
