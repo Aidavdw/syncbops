@@ -52,3 +52,10 @@ By default, such a file is written to the target directory and used in consecuti
 If the records are not present, either because you explicitly told the program not to write records, or because you deleted them manually, the fallback method is used instead.
 
 Do note that if you turn off writing records, but there are already records present, the next run might not accurately represent the state of synchronisation of the library.
+
+# Roadmap
+- Increase test coverage for converting to non-MP3 files
+- Implement converting to OPUS
+- Allow setting maximum resolution for cover art, and automatically make it smaller if it is larger.
+- Handle centralised album art directories (AlbumName.jpg)
+- Handle deleting songs, not just adding. 
