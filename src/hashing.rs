@@ -42,10 +42,10 @@ impl SyncRecord {
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
 
 /// Tries to read the previous sync db into one of the possible locations.
-pub fn try_read_records(target_library: &Path) -> Option<PreviousSyncDb> {
+pub fn read_records_of_previous_sync(target_library: &Path) -> Option<PreviousSyncDb> {
     let file_candidates = potential_locations_for_records_of_previous_syncs(target_library);
     for file in file_candidates {
-        match load_previous_sync(&file) {
+        match read_records_from_file(&file) {
             Some(x) => {
                 println!("Read records from {}", file.display());
                 return Some(x);
@@ -60,13 +60,13 @@ pub fn try_read_records(target_library: &Path) -> Option<PreviousSyncDb> {
 }
 
 /// Attempts to read records of a previous sync fron the given path.
-fn load_previous_sync(path: &Path) -> Option<PreviousSyncDb> {
+fn read_records_from_file(path: &Path) -> Option<PreviousSyncDb> {
     // Deserialise it. If it fails, it's better to just handle it like a new sync; assume an empty PreviousSyncDb.
     let file = match File::open(path) {
         Ok(x) => x,
         Err(e) => {
             eprintln!(
-                "Cannot open {} to read records from: {}. Assuming there is no previous sync data.",
+                "Cannot open {} to read records from: {}.",
                 path.display(),
                 e
             );
@@ -109,12 +109,13 @@ fn potential_locations_for_records_of_previous_syncs(target_library: &Path) -> V
     potential_dirs
 }
 
-/// Tries to write the previous sync db into one of the possible locations
-pub fn try_write_records(previous_sync_db: &PreviousSyncDb, target_library: &Path) {
+/// Tries to write the previous sync db into one of the possible locations, so that they can be
+/// checked against in the next sync.
+pub fn write_records_of_current_sync(previous_sync_db: &PreviousSyncDb, target_library: &Path) {
     let file_candidates = potential_locations_for_records_of_previous_syncs(target_library);
     let mut success = false;
     for file in file_candidates {
-        success = write_sync_db_to_file(previous_sync_db, &file);
+        success = write_sync_records_to_file(previous_sync_db, &file);
         if success {
             println!("Written records to {}", file.display());
             break;
@@ -127,7 +128,8 @@ pub fn try_write_records(previous_sync_db: &PreviousSyncDb, target_library: &Pat
     }
 }
 
-fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool {
+/// Attempt to write to this specific file
+fn write_sync_records_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool {
     // Open file for writing
     let file = match File::create(path) {
         Ok(x) => x,
@@ -139,14 +141,18 @@ fn write_sync_db_to_file(previous_sync_db: &PreviousSyncDb, path: &Path) -> bool
         }
     };
     let written = serde_json::to_writer(file, previous_sync_db);
-    if written.is_err() {
-        eprintln!("Could not write to this file :(");
-        return false;
+    match written {
+        Ok(_) => true,
+        Err(e) => {
+            eprintln!("Could not write records to {}: {}", path.display(), e);
+            false
+        }
     }
-    true
 }
 
-pub fn save_record_to_previous_sync_db(
+/// Adds a new sync result to the currently opened database of sync results, so that it can be
+/// written to disk later.
+pub fn register_record_to_previous_sync_db(
     previous_sync_db: &mut PreviousSyncDb,
     sync_record: SyncRecord,
 ) {
@@ -165,6 +171,7 @@ pub fn save_record_to_previous_sync_db(
     let _ = previous_sync_db.insert(sync_record.library_relative_path.clone(), sync_record);
 }
 
+/// Simple hash to see if a file has changed. Non-cryptographic!
 pub fn hash_file(path: &Path) -> Option<u64> {
     let mut file = std::fs::File::open(path).ok()?;
     let hash = rapidhash::rapidhash_file(&mut file).ok()?;

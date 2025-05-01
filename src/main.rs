@@ -6,7 +6,10 @@ mod song;
 mod test_data;
 use clap::{arg, Parser};
 use dialoguer::Confirm;
-use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
+use hashing::{
+    read_records_of_previous_sync, register_record_to_previous_sync_db,
+    write_records_of_current_sync, SyncRecord,
+};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
     copy_dedicated_cover_art_for_song, find_songs_in_library, sync_song, ArtStrategy, ArtworkType,
@@ -145,7 +148,7 @@ fn main() -> miette::Result<()> {
     let art_strategy = cli.art_strategy;
 
     // Load the results from the last hash.
-    let previous_sync_db = try_read_records(&target_library);
+    let previous_sync_db = read_records_of_previous_sync(&target_library);
     let records_found = previous_sync_db.is_some();
 
     // Do the synchronising on a per-file basis, so that it can be parallelised. Each one starting
@@ -228,12 +231,12 @@ fn main() -> miette::Result<()> {
             // NOTE: If miette could work with references, I could instead do printing a summary first,
             // and then owned move the records into the db.
             // Not the case, so a .clone() is necessary here.
-            save_record_to_previous_sync_db(&mut new_records, record.to_owned())
+            register_record_to_previous_sync_db(&mut new_records, record.to_owned())
         }
         // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
         // the target directory, check if the same filename -prefix exists in the source dir, otherwise
         // delete it. can re-use find_albums_in_directory()
-        try_write_records(&new_records, &target_library);
+        write_records_of_current_sync(&new_records, &target_library);
     }
 
     print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
