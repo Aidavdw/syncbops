@@ -1,4 +1,5 @@
-use crate::{music_library::UpdateType, song::Song};
+use crate::{log_failure, music_library::UpdateType, song::Song};
+use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,

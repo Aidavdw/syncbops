@@ -13,7 +13,10 @@ use music_library::{
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
-use std::path::{Path, PathBuf};
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+};
 
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
@@ -134,6 +137,7 @@ fn main() -> miette::Result<()> {
                     previous_sync_db.as_ref(),
                     cli.force,
                     cli.dry_run,
+                    Some(&pb),
                 ),
             )
         })
@@ -303,4 +307,17 @@ fn print_library_size_reduction(source_library: &Path, target_library: &Path) {
         target_lib_size / 1_000_000,
         percentage_reduction
     )
+}
+
+/// Called to log whenever an operation has failed on a music file, but the program is allowed to
+/// continue running.
+/// To death with silent errors!
+/// Wraps log and println because of https://github.com/console-rs/indicatif/issues/474
+pub fn log_failure(msg: String, pb: Option<&ProgressBar>) {
+    // TODO: Also add logging to file
+    if let Some(progress_bar) = pb {
+        progress_bar.println(msg)
+    } else {
+        eprintln!("{}", msg)
+    }
 }
