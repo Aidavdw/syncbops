@@ -36,13 +36,26 @@ Insids this directory, songs are organised `AlbumArtistName/AlbumName/01. Song T
 I have mounted my phone's storage with a usb cable at `/mnt/phone`. It is an android phone, so music is stored at `/mnt/phone/music`.
 I have not synchronised my collection yet on this device. I want to encode everything in MP3 VBR with quality factor 3.
 I would use:
-```syncbops ~/Music /mnt/phone/music/ mp3-vbr -q 3```.
+```bash 
+syncbops ~/Music /mnt/phone/music/ mp3-vbr -q 3
+```
 
 %% add example for art strategy %%
 
+# Installation
+Easiest way is to install through cargo! This will build the program from source, so it should work on any platform.
+```bash
+cargo install syncbops
+```
 
+Alternatively, you can download precompiled binaries on the releases page, and put it on your PATH.
+%% TODO: Add a simple download command that automatically puts it in ~/.local/bin and chmod+x's it
 
+## Dependencies
+This program uses [ffmpeg](https://ffmpeg.org/) under the hood. It has been tested with version 4.4.2, but it should run with newer too.
 
+# Advanced usage
+Usage guide on advanced usage flags.
 
 ## Output formats
 You can further customise the target encoding, e.g. to set a specific target bitrate. Check these out with for example `syncbops <source_lib> <target_lib> mp3-vbr --help`.
