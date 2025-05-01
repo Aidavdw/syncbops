@@ -25,7 +25,7 @@ use std::{
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
 
-const PREVIOUS_SYNC_DB_FILENAME: &str = "syncbops.dat";
+const PREVIOUS_SYNC_DB_FILENAME: &str = ".syncbops";
 
 #[derive(clap::Parser)]
 #[command(version, about, long_about = None)] // Read from cargo.toml
