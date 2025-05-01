@@ -280,6 +280,10 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
     );
     let songs = filenames
         .par_iter()
+        // If it is a song file, the processing might take a while because metadata needs to be
+        // parsed. If it is not a music file, it will be done very quickly though. Maybe set up
+        // some sort of chunking here? Realistically that shouldn't be necessary, because the
+        // majority of files in a directory should be music files.
         .progress_with(pb.clone())
         .filter_map(|path| {
             let Some(filetype) = identify_file_type(path) else {

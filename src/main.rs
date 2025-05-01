@@ -5,6 +5,7 @@ mod song;
 #[cfg(test)]
 mod test_data;
 use clap::{arg, Parser};
+use dialoguer::Confirm;
 use hashing::{save_record_to_previous_sync_db, try_read_records, try_write_records, SyncRecord};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
@@ -14,12 +15,14 @@ use music_library::{
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
 use std::{
-    error::Error,
     path::{Path, PathBuf},
+    process::exit,
 };
 
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
+
+const PREVIOUS_SYNC_DB_FILENAME: &str = "syncbops.dat";
 
 #[derive(clap::Parser)]
 #[command(version, about, long_about = None)] // Read from cargo.toml
@@ -41,10 +44,6 @@ struct Cli {
     #[arg(short, long, value_name = "STRATEGY", default_value = "prefer-file")]
     art_strategy: ArtStrategy,
 
-    /// TODO: Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
-    // #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
-    // embed_art_resolution: u64,
-
     /// Don't actually make any changes to the filesystem, just report on what it would look like after the operation. Makes most sense to run together with verbose option.
     #[arg(short, long, default_value_t = false)]
     dry_run: bool,
@@ -52,6 +51,10 @@ struct Cli {
     /// Display more info.
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    /// Automatically say 'yes' to any prompts that show up.
+    #[arg(short, long, default_value_t = false)]
+    yes: bool,
 
     /// Maximum amount of threads to use. If no value given, will use all threads.
     #[arg(short, long)]
@@ -63,6 +66,10 @@ struct Cli {
     /// Disabling them makes updating much slower, but does not contaminate the target dir.
     #[arg(long, default_value_t = false)]
     dont_save_records: bool,
+    // TODO: Maximum resolution for embedded art. Works like a threshold: Files larger than this resolution will be scaled, files lower in resolution will not be touched. 0 will not do any scaling, and embed everything at their actual resolution.
+
+    // #[arg(short, long, value_name = "RESOLUTION", default_value_t = 0)]
+    // embed_art_resolution: u64,
 }
 
 fn main() -> miette::Result<()> {
@@ -84,6 +91,38 @@ fn main() -> miette::Result<()> {
     println!("Discovering files in {}", source_library.display());
     let songs = find_songs_in_library(&source_library)?;
     println!("Discovered {} songs.", songs.len());
+
+    // It would really suck to accidentally overwrite your main library with your transcoded
+    // stuff by mixing up the source dir and target dir. So, here are some guardrails to make
+    // it much harder for that to happen:
+    // Ask for confirmation if:
+    // 1. there exists a database file in this directory (this is indicative of this being a
+    //    target lib)
+    // 2. there are many high-bitrate songs in this library.
+    {
+        let there_are_records_in_source_library =
+            source_library.join(PREVIOUS_SYNC_DB_FILENAME).exists();
+        let there_are_many_high_bitrate_songs = songs
+            .iter()
+            .filter(|song| song.metadata.bitrate_kbps > 260)
+            .count()
+            > 100;
+        if (there_are_records_in_source_library || there_are_many_high_bitrate_songs) && !cli.yes {
+            let confirmation = Confirm::new()
+                .with_prompt("The provided source library contains records from a previous sync. You might have mixed up the source directory and the target directory! Do you want to continue anywan?")
+                .default(false)
+                .interact()
+                .unwrap();
+
+            if confirmation {
+                println!("Continuing anyway!");
+            } else {
+                println!("Aborting. Saved your music library!");
+                exit(0);
+            }
+        }
+    }
+
     // Report if there are songs without album art.
     println!("Checking for songs without album art...");
     let songs_without_album_art = songs_without_album_art(&songs);

@@ -77,7 +77,3 @@ Do note that if you turn off writing records, but there are already records pres
 - Option to force re-encoding of specific filetypes, even if they are of lower bitrate (useful if an encoding is not supported on yoir target device)
 - Sync playlist files (.m3u etc)
 
-- Warn & prompt if the given source dir contains sync records (you probably switched source & target around)
-- warn & prompt if there are flacs or high bitrate files (avoid wrong direction)
-- -y argument to bypass these warnings
-- parallel chunking

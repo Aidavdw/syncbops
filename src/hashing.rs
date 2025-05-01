@@ -1,4 +1,4 @@
-use crate::{log_failure, music_library::UpdateType, song::Song};
+use crate::{log_failure, music_library::UpdateType, song::Song, PREVIOUS_SYNC_DB_FILENAME};
 use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -41,9 +41,9 @@ impl SyncRecord {
 /// Map where the keys are source-library relative paths.
 pub type PreviousSyncDb = HashMap<PathBuf, SyncRecord>;
 
-/// Tries to read the previous sync db into one of the possible locations
+/// Tries to read the previous sync db into one of the possible locations.
 pub fn try_read_records(target_library: &Path) -> Option<PreviousSyncDb> {
-    let file_candidates = generate_potential_locations_for_database_file(target_library);
+    let file_candidates = potential_locations_for_records_of_previous_syncs(target_library);
     for file in file_candidates {
         match load_previous_sync(&file) {
             Some(x) => {
@@ -59,6 +59,7 @@ pub fn try_read_records(target_library: &Path) -> Option<PreviousSyncDb> {
     None
 }
 
+/// Attempts to read records of a previous sync fron the given path.
 fn load_previous_sync(path: &Path) -> Option<PreviousSyncDb> {
     // Deserialise it. If it fails, it's better to just handle it like a new sync; assume an empty PreviousSyncDb.
     let file = match File::open(path) {
@@ -88,11 +89,12 @@ fn load_previous_sync(path: &Path) -> Option<PreviousSyncDb> {
     Some(previous_sync_db)
 }
 
-fn generate_potential_locations_for_database_file(target_library: &Path) -> Vec<PathBuf> {
+/// Previous sync records should normally be saved in the target library, but they can be
+/// missing or somewhere else. This generates potential locations it could be found at.
+fn potential_locations_for_records_of_previous_syncs(target_library: &Path) -> Vec<PathBuf> {
     let mut potential_dirs = Vec::new();
 
     // File in target library itself
-    const PREVIOUS_SYNC_DB_FILENAME: &str = "syncbops.dat";
     potential_dirs.push(target_library.join(PREVIOUS_SYNC_DB_FILENAME));
 
     // File in current working directory
@@ -109,7 +111,7 @@ fn generate_potential_locations_for_database_file(target_library: &Path) -> Vec<
 
 /// Tries to write the previous sync db into one of the possible locations
 pub fn try_write_records(previous_sync_db: &PreviousSyncDb, target_library: &Path) {
-    let file_candidates = generate_potential_locations_for_database_file(target_library);
+    let file_candidates = potential_locations_for_records_of_previous_syncs(target_library);
     let mut success = false;
     for file in file_candidates {
         success = write_sync_db_to_file(previous_sync_db, &file);
