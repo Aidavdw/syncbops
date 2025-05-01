@@ -15,6 +15,7 @@ Useful for keeping a compact version of your music library on a mobile device.
 - Only re-encodes files that have been changed. Leaves unchanged files untouched.
 - Select how to handle album art
 - Dry run for if you want to try it out first.
+- Maintains existing folder structure
 
 # How to use
 It should be pretty simple!
@@ -22,12 +23,25 @@ It should be pretty simple!
 
 `syncbops` takes two main arguments:
 First is a source library, which is the folder where you keep all your music (e.g. `~/Music/` on linux, or `C:/Users/<username>/Music` on windows). This folder will not be touched, it will just be read.
-Then the target library, which is where you want to synchronise to. This can be another folder on your computer, a folder on your phone, or anything else really!
+Then the target library, which is where you want to synchronise to (another folder on your computer, a folder on your phone).
 
-Finally, you should pass the encoding you want to have.
-This can be e.g. `mp3-vbr`, `ogg`, etc.
+Finally, you should pass the encoding you want to transcode to. see the list above for supported formats.
 
 There are several other things you can tweak about the behaviour of the program by passing flags and optional arguments. Check them at `syncbops --help`.
+
+## Examples
+I have a music library at `~/Music`.
+Insids this directory, songs are organised `AlbumArtistName/AlbumName/01. Song Title`. Most of the music here is in FLAC, but there are some MP3s, some m4a, and some ogg files too.
+I have mounted my phone's storage with a usb cable at `/mnt/phone`. It is an android phone, so music is stored at `/mnt/phone/music`.
+I have not synchronised my collection yet on this device. I want to encode everything in MP3 VBR with quality factor 3.
+I would use:
+```syncbops ~/Music /mnt/phone/music/ mp3-vbr -q 3```.
+
+%% add example for art strategy %%
+
+
+
+
 
 ## Output formats
 You can further customise the target encoding, e.g. to set a specific target bitrate. Check these out with for example `syncbops <source_lib> <target_lib> mp3-vbr --help`.
@@ -59,3 +73,11 @@ Do note that if you turn off writing records, but there are already records pres
 - Allow setting maximum resolution for cover art, and automatically make it smaller if it is larger.
 - Handle centralised album art directories (AlbumName.jpg)
 - Handle deleting songs, not just adding. 
+- Option to force re-encoding of specific filetypes, even if they are of lower bitrate (useful if an encoding is not supported on yoir target device)
+
+- Warn & prompt if the given source dir contains sync records (you probably switched source & target around)
+- warn & prompt if there are flacs or high bitrate files (avoid wrong direction)
+- -y argument to bypass these warnings
+- parallel chunking
+- make the progress bar not start on a new line
+- pipe stderr to background, not interrupting indicatif
