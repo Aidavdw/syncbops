@@ -173,6 +173,9 @@ pub enum FileType {
     Folder,
     Music,
     Art,
+    // Things like cue files, etc
+    Meta,
+    Playlist,
 }
 
 /// Returns None if the file does not exist or is not identifiable.
@@ -185,18 +188,23 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
     };
     let ext = path.extension()?.to_ascii_lowercase();
 
-    // TODO:  Identify othre common filetypes: .cue, .log, .accurip, .lrc, .lyrics, .nfo, .sfk,
-    // .sfv
-    // TODO: Also sync playlist files: .m3u
-
+    use FileType as F;
     Some(match ext.as_os_str().to_str()? {
-        "mp3" => FileType::Music,
-        "m4a" => FileType::Music,
-        "ogg" => FileType::Music,
-        "flac" => FileType::Music,
-        "png" => FileType::Art,
-        "jpg" => FileType::Art,
-        "jpeg" => FileType::Art,
+        "mp3" => F::Music,
+        "m4a" => F::Music,
+        "ogg" => F::Music,
+        "flac" => F::Music,
+        "png" => F::Art,
+        "jpg" => F::Art,
+        "jpeg" => F::Art,
+        "cue" => F::Meta,
+        "nfo" => F::Meta,
+        "log" => F::Meta,
+        "accurip" => F::Meta,
+        "lrc" => F::Meta,
+        "lyrics" => F::Meta,
+        "sfv" => F::Meta,
+        "m3u" => F::Playlist,
         _ => return None,
     })
 }
@@ -286,6 +294,8 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
                 FileType::Folder => return None,
                 FileType::Music => (),
                 FileType::Art => return None,
+                FileType::Meta => return None,
+                FileType::Playlist => return None,
             };
             match process_song_file(path, library_root, &external_album_arts) {
                 Ok(song) => Some(song),

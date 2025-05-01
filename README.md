@@ -16,6 +16,7 @@ Useful for keeping a compact version of your music library on a mobile device.
 - Select how to handle album art
 - Dry run for if you want to try it out first.
 - Maintains existing folder structure
+- Filters out excess files. Does not copy over `.cue`, extra images, etc.
 
 # How to use
 It should be pretty simple!
@@ -74,10 +75,9 @@ Do note that if you turn off writing records, but there are already records pres
 - Handle centralised album art directories (AlbumName.jpg)
 - Handle deleting songs, not just adding. 
 - Option to force re-encoding of specific filetypes, even if they are of lower bitrate (useful if an encoding is not supported on yoir target device)
+- Sync playlist files (.m3u etc)
 
 - Warn & prompt if the given source dir contains sync records (you probably switched source & target around)
 - warn & prompt if there are flacs or high bitrate files (avoid wrong direction)
 - -y argument to bypass these warnings
 - parallel chunking
-- make the progress bar not start on a new line
-- pipe stderr to background, not interrupting indicatif
