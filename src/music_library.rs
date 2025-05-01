@@ -184,6 +184,10 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
     };
     let ext = path.extension()?.to_ascii_lowercase();
 
+    // TODO:  Identify othre common filetypes: .cue, .log, .accurip, .lrc, .lyrics, .nfo, .sfk,
+    // .sfv
+    // TODO: Also sync playlist files: .m3u
+
     Some(match ext.as_os_str().to_str()? {
         "mp3" => FileType::Music,
         "m4a" => FileType::Music,
