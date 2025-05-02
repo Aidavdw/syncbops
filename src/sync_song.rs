@@ -181,9 +181,10 @@ pub fn has_music_file_changed(
 mod tests {
     use crate::{
         ffmpeg_interface::SongMetaData,
+        hashing::PreviousSyncDb,
         music_library::{
-            get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, MusicFileType,
-            UpdateType,
+            get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, FileType,
+            MusicFileType, UpdateType,
         },
         song::Song,
         test_data::TestFile,
@@ -500,4 +501,116 @@ mod tests {
     }
 
     // END ART STRATEGY = FILE_ONLY
+
+    #[test]
+    /// Write a song that is present in the database, but is not actually physically in the
+    /// directory: it should report it as a missing file and add it again.
+    fn sync_missing_song() -> miette::Result<()> {
+        let target_library = create_test_target_library();
+        let song = Song::new_debug(TestFile::Rotterdam128kbpsMp3.path(), None)?;
+        let u = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            None,
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
+
+        let db = {
+            let mut a = PreviousSyncDb::default();
+            a.insert(song.library_relative_path.clone(), u);
+            a
+        };
+
+        // Delete it. The record remains in db.
+        std::fs::remove_file(target_library.join(song.library_relative_path.clone())).unwrap();
+
+        let u2 = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            Some(&db),
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u2.update_type.unwrap(), UpdateType::TranscodeMissingTarget);
+
+        Ok(())
+    }
+
+    #[test]
+    /// Running sync-song on a file that is not changed, with records. Should not update.
+    fn sync_existing_song() -> miette::Result<()> {
+        let target_library = create_test_target_library();
+        let song = Song::new_debug(TestFile::Rotterdam128kbpsMp3.path(), None)?;
+        let u = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            None,
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
+
+        let db = {
+            let mut a = PreviousSyncDb::default();
+            a.insert(song.library_relative_path.clone(), u);
+            a
+        };
+
+        let u2 = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            Some(&db),
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u2.update_type.unwrap(), UpdateType::NoChange);
+
+        Ok(())
+    }
+
+    #[test]
+    // Running sync-rong on a file that is not changed, without records. Should not update.
+    fn sync_existing_song_no_record() -> miette::Result<()> {
+        let target_library = create_test_target_library();
+        let song = Song::new_debug(TestFile::Rotterdam128kbpsMp3.path(), None)?;
+        let u = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            None,
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
+
+        let u2 = super::sync_song(
+            &song,
+            &target_library,
+            MusicFileType::Mp3VBR { quality: 6 },
+            ArtStrategy::PreferFile,
+            None,
+            false,
+            false,
+            None,
+        )?;
+        assert_eq!(u2.update_type.unwrap(), UpdateType::NoChange);
+
+        Ok(())
+    }
 }
