@@ -2,6 +2,7 @@ mod ffmpeg_interface;
 mod hashing;
 mod music_library;
 mod song;
+mod sync_song;
 #[cfg(test)]
 mod test_data;
 use clap::{arg, Parser};
@@ -12,7 +13,7 @@ use hashing::{
 };
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use music_library::{
-    copy_dedicated_cover_art_for_song, find_songs_in_library, sync_song, ArtStrategy, ArtworkType,
+    copy_dedicated_cover_art_for_song, find_songs_in_library, ArtStrategy, ArtworkType,
     MusicFileType, MusicLibraryError, UpdateType,
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -21,6 +22,7 @@ use std::{
     path::{Path, PathBuf},
     process::exit,
 };
+use sync_song::sync_song;
 
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
