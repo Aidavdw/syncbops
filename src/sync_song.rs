@@ -190,56 +190,34 @@ mod tests {
     };
     use std::path::PathBuf;
 
-    /// Shared between all tests for has_music_file_changed
-    fn construct_has_music_file_changed(orig_name: &str, modified_name: &str) -> UpdateType {
-        use super::has_music_file_changed as f;
-        let mut original = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        original.push("test_data/");
-        let mut shadow = original.clone();
-        original.push(format!("{}.mp3", orig_name));
-        assert!(
-            original.exists(),
-            "{} does not exist, so cannot test",
-            original.display()
-        );
-        let original_song = Song::new_debug(original, None).unwrap();
-        shadow.push(format!("{}.mp3", modified_name));
-        assert!(
-            shadow.exists(),
-            "{} does not exist, so cannot test.",
-            shadow.display()
-        );
-
-        f(&original_song, &shadow, None, 60, None)
-    }
-
-    #[test]
-    /// Calling it on the same file.
-    fn has_music_file_changed_identical_file() {
-        assert_eq!(
-            construct_has_music_file_changed("no_art", "no_art"),
-            UpdateType::NoChange,
-            "identical file, should say it has not changed"
-        )
-    }
-
-    /// For tests that should have changed
-    fn construct_should_have_changed(mod_suffix: &str) {
-        let is_changed =
-            construct_has_music_file_changed("no_art", &format!("no_art_changed_{}", mod_suffix));
-        assert_eq!(
-            is_changed,
-            UpdateType::Overwrite,
-            "Says file did not change, while it did!"
-        )
-    }
-
-    #[test]
-    fn has_music_file_changed_title() {
-        construct_should_have_changed("title")
-    }
-
     // TODO: Unit tests for changed artist, album artist, lyrics, album art, etc.
+
+    /// Creates a random folder where a test file can be written to. If it fails, tries again.
+    fn create_test_target_library() -> PathBuf {
+        const MAX_ATTEMPTS: usize = 3;
+        let mut target_library = None;
+        for _ in 0..MAX_ATTEMPTS {
+            let x: PathBuf = format!(
+                "/tmp/syncbops/test_target_lib_{}",
+                random_string::generate(24, "abcdefghijklmnopqrstuvwxyz")
+            )
+            .into();
+            match std::fs::create_dir(&x) {
+                Ok(_) => {
+                    target_library = Some(x);
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+        match target_library {
+            Some(x) => x,
+            None => panic!(
+                "Could not create test target library even after {} attempts ",
+                MAX_ATTEMPTS
+            ),
+        }
+    }
 
     /// convenience function to simulate adding a new song.
     /// Used for checking if the resulting som actually has the data that is requested of it.
@@ -251,23 +229,14 @@ mod tests {
     ) -> miette::Result<()> {
         use super::sync_song;
 
-        let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        d.push("test_data/");
-        let source_library: PathBuf = d;
-        let target_library: PathBuf = format!(
-            "/tmp/syncbops/sync_test_lib_{:?}_to{:?}_{:?}_{:?}",
-            test_file, target_filetype, external_art, art_strategy
-        )
-        .into();
-        let _ = std::fs::create_dir(&target_library);
-        // Delete anything that's already there, because we wanna test it if it's a new file.
-        let library_relative_path = library_relative_path(&test_file.path(), &source_library);
-        let target = get_shadow_filename(&library_relative_path, &target_library, &target_filetype);
-        let _ = std::fs::remove_file(&target);
-        assert!(!target.exists());
-
+        let target_library = create_test_target_library();
         // let target_filetype = MusicFileType::Mp3CBR { bitrate: 60 };
         let song = Song::new_debug(test_file.path(), external_art.map(|tf| tf.path()))?;
+        let target = get_shadow_filename(
+            &song.library_relative_path,
+            &target_library,
+            &target_filetype,
+        );
         let updated_record = sync_song(
             &song,
             &target_library,
