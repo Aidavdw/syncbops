@@ -102,7 +102,7 @@ fn main() -> miette::Result<()> {
     // 1. there exists a database file in this directory (this is indicative of this being a
     //    target lib)
     // 2. there are many high-bitrate songs in this library.
-    {
+    if !cli.yes {
         let there_are_records_in_source_library =
             source_library.join(PREVIOUS_SYNC_DB_FILENAME).exists();
         let there_are_many_high_bitrate_songs = songs
@@ -110,7 +110,7 @@ fn main() -> miette::Result<()> {
             .filter(|song| song.metadata.bitrate_kbps > 260)
             .count()
             > 100;
-        if (there_are_records_in_source_library || there_are_many_high_bitrate_songs) && !cli.yes {
+        if there_are_records_in_source_library || there_are_many_high_bitrate_songs {
             let confirmation = Confirm::new()
                 .with_prompt("The provided source library contains records from a previous sync. You might have mixed up the source directory and the target directory! Do you want to continue anywan?")
                 .default(false)
