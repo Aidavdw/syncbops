@@ -99,12 +99,12 @@ fn potential_locations_for_records_of_previous_syncs(target_library: &Path) -> V
 
     // File in current working directory
     if let Ok(pwd) = std::env::current_dir() {
-        potential_dirs.push(pwd)
+        potential_dirs.push(pwd.join(PREVIOUS_SYNC_DB_FILENAME))
     };
 
     // File in user's home directory
     if let Some(pwd) = dirs::home_dir() {
-        potential_dirs.push(pwd)
+        potential_dirs.push(pwd.join(PREVIOUS_SYNC_DB_FILENAME))
     };
     potential_dirs
 }
