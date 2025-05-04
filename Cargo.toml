@@ -1,6 +1,6 @@
 [package]
 name = "syncbops"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 authors = ["Aida van de Wetering <aida@osphire.com>"]
 license = "GPL-3.0-or-later"
