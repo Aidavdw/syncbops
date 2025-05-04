@@ -161,7 +161,18 @@ pub fn transcode_song(
                 .arg("-qscale:a")
                 .arg(format!("{quality:.3}"));
         }
-        _ => panic!("MusicFileType not yet implemented as a target. Feel free to send a PR <3"),
+        M::Opus {
+            bitrate,
+            compression_level,
+        } => {
+            binding
+                .arg("libopus")
+                .arg("-b:a")
+                .arg(format!("{}k", bitrate));
+        }
+        M::Flac { quality: _ } => {
+            panic!("Encoding to flac not yet implemented as a target. Feel free to send a PR <3")
+        }
     }
 
     // Take all the metadata from file 0 (source library music file).
@@ -187,9 +198,9 @@ pub fn transcode_song(
             // Write tags as ID3v2.3. This is more broadly supported than ID3v2.4.
             binding.arg("-id3v2_version").arg("3");
         }
-        MusicFileType::Opus { .. } => todo!(),
+        MusicFileType::Opus { .. } => (),
         MusicFileType::Vorbis { .. } => (),
-        MusicFileType::Flac { .. } => todo!(),
+        MusicFileType::Flac { .. } => (),
     };
 
     // TODO: Downscale art if it is higher resolution than required. If the desired resolution is
