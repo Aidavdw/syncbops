@@ -115,19 +115,35 @@ pub fn has_music_file_changed(
             pb,
         );
     };
+
+    // If the file is not there yet, then it is a new file.
+    // This is only done after checking the hash existence, because otherwise missing songs
+    // (exists in recods, not as file) cannot be detected.
+    if !target.exists() {
+        return if song.metadata.bitrate_kbps < desired_bitrate {
+            U::Copied
+        } else {
+            U::NewTranscode
+        };
+    }
+
     // If you are here, no previous_sync_db is available, or checking for a previous sync didn't work.
     // See if the source file is newer than the destination file.
-    let Ok(target_is_outdated) =
-        has_source_changed_after_target_has_been_created(&song.absolute_path, target)
-    else {
-        log_failure(
+
+    let target_is_outdated = match has_source_changed_after_target_has_been_created(
+        &song.absolute_path,
+        target,
+    ) {
+        Ok(x) => x,
+        Err(e) => {
+            log_failure(
             format!(
-                "Could not compare last changed time and created time of shadow copy of {}. Falling back to comparing metadata.",
-                song
+                "Could not compare last changed time and created time of shadow copy of {song}: {e:?}. Falling back to comparing metadata.",
             ),
             pb,
         );
-        return compare_files_on_metadata(song, target, desired_bitrate, pb);
+            return compare_files_on_metadata(song, target, desired_bitrate, pb);
+        }
     };
     if target_is_outdated {
         return if song.metadata.bitrate_kbps < desired_bitrate {
@@ -165,22 +181,13 @@ fn compare_files_on_metadata(
             }
         }
         Err(e) => {
-            if matches!(e, FfmpegError::FileDoesNotExist { .. }) {
-                // False alarm. Just consider it as new.
-                // Just copy a file if you'd just incur more encoding loss
-                if source.metadata.bitrate_kbps < desired_bitrate {
-                    U::Copied
-                } else {
-                    U::NewTranscode
-                }
-            } else {
-                // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
-                log_failure(
-                    format!("Could not read metadata from shadow file, so overwriting it: {e}"),
-                    pb,
-                );
-                U::Overwrite
-            }
+            // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
+            log_failure(
+                format!("Could not read metadata from shadow file, so overwriting it: {e}"),
+                pb,
+            );
+            debug_assert!(target.exists(), "Checking metadata should not fail because the file exists, because file existence is already checked earlier.");
+            U::Overwrite
         }
     }
 }
@@ -236,9 +243,17 @@ fn has_source_changed_after_target_has_been_created(
     source: &Path,
     target: &Path,
 ) -> Result<bool, MusicLibraryError> {
-    let source_filesystem_md = std::fs::metadata(source)?;
-    let target_filesystem_md = std::fs::metadata(target)?;
-    Ok(source_filesystem_md.modified()? > target_filesystem_md.created()?)
+    let source_filesystem_md =
+        std::fs::metadata(source).map_err(MusicLibraryError::SourceModifiedTime)?;
+    let source_last_modified = source_filesystem_md
+        .modified()
+        .map_err(MusicLibraryError::SourceModifiedTime)?;
+    let target_filesystem_md =
+        std::fs::metadata(target).map_err(MusicLibraryError::TargetCreatedTime)?;
+    let target_created = target_filesystem_md
+        .created()
+        .map_err(MusicLibraryError::TargetCreatedTime)?;
+    Ok(source_last_modified > target_created)
 }
 
 #[cfg(test)]
