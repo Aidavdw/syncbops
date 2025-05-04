@@ -401,7 +401,7 @@ pub fn copy_dedicated_cover_art_for_song(
     }
 }
 
-#[derive(thiserror::Error, miette::Diagnostic)]
+#[derive(thiserror::Error)]
 pub enum MusicLibraryError {
     #[error("Could not generate a list of filenames in the source library.")]
     ListFilenames(#[from] std::io::Error),
@@ -440,4 +440,12 @@ impl std::fmt::Debug for MusicLibraryError {
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MusicLibraryError;
+
+    // miette::Diagnostic/ miette::Result is only used in tests, so can't use the derive macro.
+    impl miette::Diagnostic for MusicLibraryError {}
 }

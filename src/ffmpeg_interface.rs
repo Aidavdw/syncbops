@@ -249,7 +249,7 @@ pub fn transcode_song(
     Ok(())
 }
 
-#[derive(thiserror::Error, Debug, miette::Diagnostic)]
+#[derive(thiserror::Error, Debug)]
 pub enum FfmpegError {
     #[error(
         "ffmpeg exited with a failure code for file {file}. Tried calling `ffmpeg {arguments}`. Output of ffmpeg: {msg} "
@@ -284,12 +284,16 @@ pub enum FfmpegError {
 
 #[cfg(test)]
 mod tests {
+    use super::FfmpegError;
     use crate::{
         ffmpeg_interface::{parse_music_file_metadata, SongMetaData},
         music_library::MusicFileType,
         test_data::{TestFile, COMPARISON_BENCHMARK_TEST_FILES},
     };
     use std::path::PathBuf;
+
+    // miette::Diagnostic/ miette::Result is only used in tests, so can't use the derive macro.
+    impl miette::Diagnostic for FfmpegError {}
 
     #[test]
     fn metadata_mp3_with_art() -> miette::Result<()> {

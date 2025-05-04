@@ -78,7 +78,7 @@ struct Cli {
     // embed_art_resolution: u64,
 }
 
-fn main() -> miette::Result<()> {
+fn main() -> Result<(), MusicLibraryError> {
     let cli = Cli::parse();
     let source_library = cli.source_library;
     let target_library = cli.target_library;
@@ -205,8 +205,7 @@ fn main() -> miette::Result<()> {
     if !target_library.is_dir() {
         return Err(MusicLibraryError::TargetLibraryDoesNotExist {
             target_library: target_library.clone(),
-        }
-        .into());
+        });
     }
 
     let art_strategy = cli.art_strategy;
@@ -281,13 +280,18 @@ fn main() -> miette::Result<()> {
         None
     };
 
+    print!("{}", summarize(&sync_results, new_cover_arts, cli.verbose));
+    if !cli.dry_run {
+        print_library_size_reduction(&source_library, &target_library);
+    }
+
     // Update the PreviousSyncDB with the newly added items.
     if !cli.dont_save_records && !cli.dry_run {
         println!("Writing new records so the next sync can be done faster");
         // Carry over any previous records (files that are not touched retain their original data).
         let mut new_records = previous_sync_db.unwrap_or_default();
 
-        for (_song, update_result) in &sync_results {
+        for (_song, update_result) in sync_results {
             let Ok(record) = update_result else {
                 // Can't update syncdb if it errored.
                 continue;
@@ -296,17 +300,12 @@ fn main() -> miette::Result<()> {
             // NOTE: If miette could work with references, I could instead do printing a summary first,
             // and then owned move the records into the db.
             // Not the case, so a .clone() is necessary here.
-            register_record_to_previous_sync_db(&mut new_records, record.to_owned())
+            register_record_to_previous_sync_db(&mut new_records, record)
         }
         // TODO: Also handle deleting songs. Right now it only adds one-way lol. For every filename in
         // the target directory, check if the same filename -prefix exists in the source dir, otherwise
         // delete it. can re-use find_albums_in_directory()
         write_records_of_current_sync(&new_records, &target_library);
-    }
-
-    print!("{}", summarize(sync_results, new_cover_arts, cli.verbose));
-    if !cli.dry_run {
-        print_library_size_reduction(&source_library, &target_library);
     }
 
     // If not writing any records, but there are records present, the synchronisation state in
@@ -328,12 +327,10 @@ pub fn songs_without_album_art(songs: &[Song]) -> Vec<&Song> {
 }
 
 fn summarize(
-    sync_results: SyncResults,
+    sync_results: &SyncResults,
     new_cover_arts: Option<Vec<PathBuf>>,
     verbose: bool,
 ) -> String {
-    // This function should use an owned SyncResults, because otherwise you can't get nice
-    // miette::report
     let mut changed_buf = String::new();
     let mut error_buf = String::new();
     let mut n_unchanged = 0;
