@@ -462,6 +462,8 @@ mod tests {
         )
     }
 
+    // START TRANSCODING TO MP3 VBR
+
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn mp3_no_art_embed() -> miette::Result<()> {
@@ -591,7 +593,7 @@ mod tests {
     #[test]
     /// Attempt to get embedded art, even though no art is supplied
     fn m4a_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, true, None)
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, None)
     }
 
     #[test]
@@ -629,6 +631,58 @@ mod tests {
     fn m4a_both_drop() -> miette::Result<()> {
         transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
     }
+
+    #[test]
+    /// Attempt to get embedded art, even though no art is supplied
+    fn opus_no_art_embed() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, None)
+    }
+
+    #[test]
+    /// Keep embedded art
+    fn opus_keep_embedded_art() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
+    }
+
+    #[test]
+    /// drop embedded album art
+    fn opus_embedded_art_drop() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
+    }
+
+    #[test]
+    /// drop external art
+    fn opus_external_art_drop() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
+    }
+
+    #[test]
+    /// embed external art
+    fn opus_external_art_embed() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn opus_both_embed() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(
+            TestFile::Rotterdam96kbpsOpusWithArt,
+            true,
+            Some(TestFile::Jpg600),
+        )
+    }
+
+    #[test]
+    /// embed, supplied are both external art and already embedded.
+    fn opus_both_drop() -> miette::Result<()> {
+        transcode_to_mp3_vbr_test(
+            TestFile::Rotterdam96kbpsOpusWithArt,
+            false,
+            Some(TestFile::Jpg600),
+        )
+    }
+
+    // END TRANSCODING TO MP3 VBR
 
     // #[test]
     // /// Comparing how long it takes to hash a file versuse how long it takes to get metadata.

@@ -16,6 +16,10 @@ pub enum TestFile {
     RotterdamFlac,
     Rotterdam96kbpsMp3,
     Rotterdam110kbpsM4a,
+    Rotterdam96kbpsOpus,
+    Rotterdam96kbpsOpusWithArt,
+    Rotterdam128kbpsOpus,
+    Rotterdam128kbpsOpusWithArt,
 }
 
 impl TestFile {
@@ -37,6 +41,10 @@ impl TestFile {
             TestFile::RotterdamFlac => "ns_rotterdam.flac",
             TestFile::Rotterdam96kbpsMp3 => "ns_rotterdam_96kbps.mp3",
             TestFile::Rotterdam110kbpsM4a => "ns_rotterdam_110kbps.m4a",
+            TestFile::Rotterdam96kbpsOpus => "ns_rotterdam_96kbps.opus",
+            TestFile::Rotterdam96kbpsOpusWithArt => "ns_rotterdam_96kbps_art.opus",
+            TestFile::Rotterdam128kbpsOpus => "ns_rotterdam_128kbps.opus",
+            TestFile::Rotterdam128kbpsOpusWithArt => "ns_rotterdam_128kbps_art.opus",
         };
         d.push(a);
         debug_assert!(d.exists(), "Test data does not exist!");
