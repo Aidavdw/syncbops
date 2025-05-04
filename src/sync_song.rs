@@ -77,6 +77,7 @@ pub fn sync_song(
 }
 
 /// Checks if the source music file has been changed since it has been transcoded.
+/// Defers to several sub-functions.
 pub fn has_music_file_changed(
     song: &Song,
     target: &Path,
@@ -94,6 +95,13 @@ pub fn has_music_file_changed(
     let Some(source_hash) = hash_file(&song.absolute_path) else {
         // If you can't determine a hash, there is no way of knowing whether or not the file has
         // changed.
+        log_failure(
+            format!(
+                "Could not determine hash of {}. Falling back to comparing metadata.",
+                song
+            ),
+            pb,
+        );
         return compare_files_on_metadata(song, target, desired_bitrate, pb);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
@@ -107,13 +115,18 @@ pub fn has_music_file_changed(
             pb,
         );
     };
-
-    // No previous_sync_db is available, or checking for a previous sync didn't work.
-    // TODO: Re-instate the small check here to see if the source file is newer than the
-    // destination file.
+    // If you are here, no previous_sync_db is available, or checking for a previous sync didn't work.
+    // See if the source file is newer than the destination file.
     let Ok(target_is_outdated) =
         has_source_changed_after_target_has_been_created(&song.absolute_path, target)
     else {
+        log_failure(
+            format!(
+                "Could not compare last changed time and created time of shadow copy of {}. Falling back to comparing metadata.",
+                song
+            ),
+            pb,
+        );
         return compare_files_on_metadata(song, target, desired_bitrate, pb);
     };
     if target_is_outdated {
