@@ -206,6 +206,7 @@ fn identify_file_type(path: &Path) -> Option<FileType> {
         "lyrics" => F::Meta,
         "sfv" => F::Meta,
         "m3u" => F::Playlist,
+        "m3u8" => F::Playlist,
         _ => return None,
     })
 }
