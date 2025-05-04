@@ -103,18 +103,23 @@ fn main() -> miette::Result<()> {
     // Ask for confirmation if:
     // 1. there exists a database file in this directory (this is indicative of this being a
     //    target lib)
-    // 2. there are many high-bitrate songs in this library.
+    // 2. The target library is larger than the source library
+    // 3. The target library contains FLAC files.
+    // You can also check on a metadata level, but not ideal.
+    // 4. there are many low-bitrate songs in the target library.
+    // 5. The target library contains high-bitrate songs
     if !cli.yes {
-        let there_are_records_in_source_library =
-            source_library.join(PREVIOUS_SYNC_DB_FILENAME).exists();
-        let there_are_many_high_bitrate_songs = songs
-            .iter()
-            .filter(|song| song.metadata.bitrate_kbps > 260)
-            .count()
-            > 100;
-        if there_are_records_in_source_library || there_are_many_high_bitrate_songs {
+        // 1. there exists a database file in this directory (this is indicative of this being a
+        let records_in_source_library = source_library.join(PREVIOUS_SYNC_DB_FILENAME);
+        if records_in_source_library.exists() {
             let confirmation = Confirm::new()
-                .with_prompt("The provided source library contains records from a previous sync. You might have mixed up the source directory and the target directory! Do you want to continue anywan?")
+                .with_prompt(format!(
+                    "The provided source library ({}) \
+                    contains records from a previous sync. \
+                    You might have mixed up the source directory and the target directory! \
+                    Do you want to continue anyway?",
+                    source_library.display()
+                ))
                 .default(false)
                 .interact()
                 .unwrap();
@@ -126,6 +131,62 @@ fn main() -> miette::Result<()> {
                 exit(0);
             }
         }
+
+        // 2. The target library is larger than the source library
+        {
+            use fs_extra::dir::get_size;
+            let source_lib_size =
+                get_size(&source_library).expect("Can't get size of source library dir");
+            let target_lib_size =
+                get_size(&target_library).expect("Can't get size of target library dir");
+            if target_lib_size > source_lib_size {
+                let confirmation = Confirm::new()
+                    .with_prompt(format!(
+                        "The provided source library ({}, {} GB) \
+                    is much smaller in size than the target library ({}, {} GB). \
+                    You might have mixed up the source directory and the target directory! \
+                    Do you want to continue anyway?",
+                        source_library.display(),
+                        source_lib_size / 1_000_000,
+                        target_library.display(),
+                        target_lib_size / 1_000_000,
+                    ))
+                    .default(false)
+                    .interact()
+                    .unwrap();
+
+                if confirmation {
+                    println!("Continuing anyway!");
+                } else {
+                    println!("Aborting. Saved your music library!");
+                    exit(0);
+                }
+            }
+        }
+
+        // TODO:  3. The target library contains FLAC files.
+
+        // 4. there are many low-bitrate songs in the target library.
+        // const BITRATE_WARNING_THRESHOLD: u32 = 260;
+        // let there_are_many_low_bitrate_songs = songs
+        //     .iter()
+        //     .filter(|song| song.metadata.bitrate_kbps > BITRATE_WARNING_THRESHOLD)
+        //     .count()
+        //     > 100;
+        // if there_are_many_low_bitrate_songs {
+        //     let confirmation = Confirm::new()
+        //         .with_prompt("The provided source library contains many low-bitrate songs. You might have mixed up the source directory and the target directory! Do you want to continue anyway?")
+        //         .default(false)
+        //         .interact()
+        //         .unwrap();
+        //
+        //     if confirmation {
+        //         println!("Continuing anyway!");
+        //     } else {
+        //         println!("Aborting. Saved your music library!");
+        //         exit(0);
+        //     }
+        // }
     }
 
     // Report if there are songs without album art.
