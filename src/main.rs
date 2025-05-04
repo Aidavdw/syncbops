@@ -18,6 +18,7 @@ use music_library::{
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use song::Song;
+use std::fmt::Write;
 use std::{
     path::{Path, PathBuf},
     process::exit,
@@ -331,21 +332,16 @@ fn summarize(
     new_cover_arts: Option<Vec<PathBuf>>,
     verbose: bool,
 ) -> String {
-    // Thif function should use an owned SyncResults, because otherwise you can't get nice
+    // This function should use an owned SyncResults, because otherwise you can't get nice
     // miette::report
-    let mut summary = String::with_capacity(4000);
+    let mut changed_buf = String::new();
+    let mut error_buf = String::new();
     let mut n_unchanged = 0;
     let mut n_new = 0;
     let mut n_overwritten = 0;
     let mut n_err = 0;
     let mut n_missing_target = 0;
     let mut n_copied = 0;
-    let mut error_messages = if verbose {
-        String::with_capacity(50000)
-    } else {
-        String::new()
-    };
-    let mut song_updates = String::new();
     for (song, r) in sync_results {
         match r {
             Ok(sync_record) => {
@@ -354,31 +350,42 @@ fn summarize(
                     .expect("Empty update type. Implementation error");
                 use UpdateType as U;
                 match update_type {
-                    U::NoChange => n_unchanged += 1,
+                    U::NoChange => {
+                        n_unchanged += 1;
+                        // If not changed, don't log anything extra.
+                        continue;
+                    }
                     U::NewTranscode => n_new += 1,
                     U::Overwrite => n_overwritten += 1,
                     U::ForceOverwrite => n_overwritten += 1,
                     U::TranscodeMissingTarget => n_missing_target += 1,
                     U::Copied => n_copied += 1,
                 };
-                song_updates.push_str(&format!(
-                    "{} →  [{:?}]\n",
-                    song.absolute_path.display(),
-                    update_type
-                ))
+                if verbose {
+                    writeln!(
+                        changed_buf,
+                        "[{:?}] {}",
+                        update_type,
+                        song.library_relative_path.display()
+                    )
+                    .unwrap();
+                }
             }
             Err(e) => {
                 n_err += 1;
-                let err_msg = &format!(
-                    "{} →  [Error]\n{:?}\n",
-                    song.absolute_path.display(),
-                    miette::Report::new(e)
-                );
-                error_messages.push_str(err_msg)
+                writeln!(
+                    error_buf,
+                    // debug format also displays source error
+                    "{}: {}",
+                    song.library_relative_path.display(),
+                    e
+                )
+                .unwrap();
             }
         }
     }
-    summary.push_str("====== Summary of synchronisation ======\n");
+    let mut summary = String::new();
+    writeln!(summary, "====== Summary of synchronisation ======").unwrap();
     summary.push_str(&format!("Unchanged: {}\n", n_unchanged));
     summary.push_str(&format!("New songs: {}\n", n_new));
     summary.push_str(&format!("Changed songs (overwritten): {}\n", n_overwritten));
@@ -392,11 +399,11 @@ fn summarize(
     } else {
         summary.push_str(&format!("Files with errors: {}\n", n_err));
         summary.push_str("The following errors occurred:\n");
-        summary.push_str(&error_messages);
+        summary += &error_buf;
     }
     if verbose {
-        summary.push_str("Change log\n");
-        summary.push_str(&song_updates)
+        summary.push_str("Changed files\n");
+        summary += &changed_buf;
     }
 
     summary
