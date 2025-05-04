@@ -9,6 +9,7 @@ use crate::{
 };
 use indicatif::ProgressBar;
 use std::{fs, io, path::Path};
+use UpdateType as U;
 
 /// Synchronises the file. Returns true if the file is updated, false it was not.
 pub fn sync_song(
@@ -21,7 +22,6 @@ pub fn sync_song(
     dry_run: bool,
     pb: Option<&ProgressBar>,
 ) -> Result<SyncRecord, MusicLibraryError> {
-    use UpdateType as U;
     // TODO:If it exists with a different filetype, give a warning
     let shadow = get_shadow_filename(
         &song.library_relative_path,
@@ -88,97 +88,24 @@ pub fn has_music_file_changed(
     use UpdateType as U;
 
     // We need to perform costly checks here:
-    // Checking the hash of a file takes like 1-2 ms
-    // Parsing music file metadata takes like 250 ms.
     // Ideally, we'd only parse the metadata for the target file if it is truly necessary.
 
-    /// Fallback, costly method: Comparing the metadata of the two files.
-    fn compare_files_on_metadata(
-        source: &Song,
-        target: &Path,
-        desired_bitrate: u32,
-        pb: Option<&ProgressBar>,
-    ) -> UpdateType {
-        match SongMetaData::parse_file(target) {
-            Ok(shadow_metadata) => {
-                if source.metadata.is_same_except_bitrate(&shadow_metadata) {
-                    U::NoChange
-                } else {
-                    // Just copy a file if you'd just incur more encoding loss
-                    if source.metadata.bitrate_kbps < desired_bitrate {
-                        U::Copied
-                    } else {
-                        U::Overwrite
-                    }
-                }
-            }
-            Err(e) => {
-                if matches!(e, FfmpegError::FileDoesNotExist { .. }) {
-                    // False alarm. Just consider it as new.
-                    // Just copy a file if you'd just incur more encoding loss
-                    if source.metadata.bitrate_kbps < desired_bitrate {
-                        U::Copied
-                    } else {
-                        U::NewTranscode
-                    }
-                } else {
-                    // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
-                    log_failure(
-                        format!("Could not read metadata from shadow file, so overwriting it: {e}"),
-                        pb,
-                    );
-                    U::Overwrite
-                }
-            }
-        }
-    }
-
+    // Checking the hash of a file takes like 1-2 ms
     let Some(source_hash) = hash_file(&song.absolute_path) else {
-        // If you can't determine a hash,there is no way of knowing whether or not the file has
+        // If you can't determine a hash, there is no way of knowing whether or not the file has
         // changed.
         return compare_files_on_metadata(song, target, desired_bitrate, pb);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
-        if let Some(previous_record) = db.get(&song.library_relative_path) {
-            // If the file is in the previous_sync_db, but is not actually present,
-            // consider it a missing file.
-            if !target.exists() {
-                return U::TranscodeMissingTarget;
-            }
-            // Check if there is a saved hash, and if so, if they are the same.
-            if let Some(hash_at_previous_sync) = previous_record.hash {
-                if hash_at_previous_sync == source_hash {
-                    return U::NoChange;
-                } else {
-                    // The hashes are not the same. Hence, the file must have changed.
-                    return U::Overwrite;
-                }
-            }
-            // Didn't save a hash at previous sync.
-            log_failure(
-                format!(
-                    "{song} does not have a hash for previous sync cached, but a record exists."
-                ),
-                pb,
-            );
-        };
-        // The file is not yet present, and it also does not yet appear in the records.
-        // It has to be a new file, so transcode it or copy it.
-        if !target.exists() {
-            return if song.metadata.bitrate_kbps < desired_bitrate {
-                U::Copied
-            } else {
-                U::NewTranscode
-            };
-        } else {
-            // The file is present, but somehow does not appear in the previous sync db.
-            // It could be manually moved into the target library, but then there is no way of
-            // knowing if it is still up to date. Hence, it should be checked.
-            // It could also be that it could just not be inserted into the records; then too,
-            // checking based on metadata is a good idea.
-            return compare_files_on_metadata(song, target, desired_bitrate, pb);
-        }
+        return has_music_file_changed_based_on_hash_and_records(
+            song,
+            source_hash,
+            target,
+            desired_bitrate,
+            db,
+            pb,
+        );
     };
 
     // No previous_sync_db is available, or checking for a previous sync didn't work.
@@ -201,6 +128,95 @@ pub fn has_music_file_changed(
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
     compare_files_on_metadata(song, target, desired_bitrate, pb)
+}
+
+/// Fallback, costly method: Comparing the metadata of the two files.
+/// Parsing music file metadata takes like 250 ms.
+fn compare_files_on_metadata(
+    source: &Song,
+    target: &Path,
+    desired_bitrate: u32,
+    pb: Option<&ProgressBar>,
+) -> UpdateType {
+    match SongMetaData::parse_file(target) {
+        Ok(shadow_metadata) => {
+            if source.metadata.is_same_except_bitrate(&shadow_metadata) {
+                U::NoChange
+            } else {
+                // Just copy a file if you'd just incur more encoding loss
+                if source.metadata.bitrate_kbps < desired_bitrate {
+                    U::Copied
+                } else {
+                    U::Overwrite
+                }
+            }
+        }
+        Err(e) => {
+            if matches!(e, FfmpegError::FileDoesNotExist { .. }) {
+                // False alarm. Just consider it as new.
+                // Just copy a file if you'd just incur more encoding loss
+                if source.metadata.bitrate_kbps < desired_bitrate {
+                    U::Copied
+                } else {
+                    U::NewTranscode
+                }
+            } else {
+                // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
+                log_failure(
+                    format!("Could not read metadata from shadow file, so overwriting it: {e}"),
+                    pb,
+                );
+                U::Overwrite
+            }
+        }
+    }
+}
+
+fn has_music_file_changed_based_on_hash_and_records(
+    song: &Song,
+    source_hash: u64,
+    target: &Path,
+    desired_bitrate: u32,
+    db: &PreviousSyncDb,
+    pb: Option<&ProgressBar>,
+) -> UpdateType {
+    if let Some(previous_record) = db.get(&song.library_relative_path) {
+        // If the file is in the previous_sync_db, but is not actually present,
+        // consider it a missing file.
+        if !target.exists() {
+            return U::TranscodeMissingTarget;
+        }
+        // Check if there is a saved hash, and if so, if they are the same.
+        if let Some(hash_at_previous_sync) = previous_record.hash {
+            if hash_at_previous_sync == source_hash {
+                return U::NoChange;
+            } else {
+                // The hashes are not the same. Hence, the file must have changed.
+                return U::Overwrite;
+            }
+        }
+        // Didn't save a hash at previous sync.
+        log_failure(
+            format!("{song} does not have a hash for previous sync cached, but a record exists."),
+            pb,
+        );
+    };
+    // The file is not yet present, and it also does not yet appear in the records.
+    // It has to be a new file, so transcode it or copy it.
+    if !target.exists() {
+        return if song.metadata.bitrate_kbps < desired_bitrate {
+            U::Copied
+        } else {
+            U::NewTranscode
+        };
+    } else {
+        // The file is present, but somehow does not appear in the previous sync db.
+        // It could be manually moved into the target library, but then there is no way of
+        // knowing if it is still up to date. Hence, it should be checked.
+        // It could also be that it could just not be inserted into the records; then too,
+        // checking based on metadata is a good idea.
+        return compare_files_on_metadata(song, target, desired_bitrate, pb);
+    }
 }
 
 fn has_source_changed_after_target_has_been_created(
