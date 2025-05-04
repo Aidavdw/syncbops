@@ -11,6 +11,11 @@ pub enum TestFile {
     OggWithArt,
     OggWithoutArt,
     Jpg600,
+    Rotterdam128kbpsMp3,
+    Rotterdam128kbpsM4a,
+    RotterdamFlac,
+    Rotterdam96kbpsMp3,
+    Rotterdam110kbpsM4a,
 }
 
 impl TestFile {
@@ -27,8 +32,20 @@ impl TestFile {
             TestFile::OggWithArt => "with_art.ogg",
             TestFile::OggWithoutArt => "no_art.ogg",
             TestFile::Jpg600 => "cover_art.jpg",
+            TestFile::Rotterdam128kbpsMp3 => "ns_rotterdam_128kbps.mp3",
+            TestFile::Rotterdam128kbpsM4a => "ns_rotterdam_128kbps.m4a",
+            TestFile::RotterdamFlac => "ns_rotterdam.flac",
+            TestFile::Rotterdam96kbpsMp3 => "ns_rotterdam_96kbps.mp3",
+            TestFile::Rotterdam110kbpsM4a => "ns_rotterdam_110kbps.m4a",
         };
         d.push(a);
+        debug_assert!(d.exists(), "Test data does not exist!");
         d
     }
 }
+
+// pub const COMPARISON_BENCHMARK_TEST_FILES: [TestFile; 3] = [
+//     TestFile::Mp3CBRWithArt,
+//     TestFile::FlacWithArt,
+//     TestFile::Rotterdam128kbpsM4a,
+// ];
