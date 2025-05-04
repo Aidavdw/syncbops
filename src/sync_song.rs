@@ -21,6 +21,7 @@ pub fn sync_song(
     force: bool,
     dry_run: bool,
     pb: Option<&ProgressBar>,
+    verbose: bool,
 ) -> Result<SyncRecord, MusicLibraryError> {
     // TODO:If it exists with a different filetype, give a warning
     let shadow = get_shadow_filename(
@@ -29,7 +30,14 @@ pub fn sync_song(
         &target_filetype,
     );
     let desired_bitrate = target_filetype.equivalent_bitrate();
-    let status = has_music_file_changed(song, &shadow, previous_sync_db, desired_bitrate, pb);
+    let status = has_music_file_changed(
+        song,
+        &shadow,
+        previous_sync_db,
+        desired_bitrate,
+        pb,
+        verbose,
+    );
     let new_sync_record = SyncRecord::from_song(song);
 
     // Early exit if unchanged.
@@ -85,6 +93,7 @@ pub fn has_music_file_changed(
     // Any file that is above this bitrate will just be considered to be copied.
     desired_bitrate: u32,
     pb: Option<&ProgressBar>,
+    verbose: bool,
 ) -> UpdateType {
     use UpdateType as U;
 
@@ -95,14 +104,16 @@ pub fn has_music_file_changed(
     let Some(source_hash) = hash_file(&song.absolute_path) else {
         // If you can't determine a hash, there is no way of knowing whether or not the file has
         // changed.
-        log_failure(
-            format!(
-                "Could not determine hash of {}. Falling back to comparing metadata.",
-                song
-            ),
-            pb,
-        );
-        return compare_files_on_metadata(song, target, desired_bitrate, pb);
+        if verbose {
+            log_failure(
+                format!(
+                    "Could not determine hash of {}. Falling back to comparing metadata.",
+                    song
+                ),
+                pb,
+            );
+        }
+        return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
@@ -113,6 +124,7 @@ pub fn has_music_file_changed(
             desired_bitrate,
             db,
             pb,
+            verbose,
         );
     };
 
@@ -130,21 +142,23 @@ pub fn has_music_file_changed(
     // If you are here, no previous_sync_db is available, or checking for a previous sync didn't work.
     // See if the source file is newer than the destination file.
 
-    let target_is_outdated = match has_source_changed_after_target_has_been_created(
-        &song.absolute_path,
-        target,
-    ) {
-        Ok(x) => x,
-        Err(e) => {
-            log_failure(
-            format!(
-                "Could not compare last changed time and created time of shadow copy of {song}: {e:?}. Falling back to comparing metadata.",
-            ),
-            pb,
-        );
-            return compare_files_on_metadata(song, target, desired_bitrate, pb);
-        }
-    };
+    let target_is_outdated =
+        match has_source_changed_after_target_has_been_created(&song.absolute_path, target) {
+            Ok(x) => x,
+            Err(e) => {
+                if verbose {
+                    log_failure(
+                        format!(
+                            "Could not compare last changed time and \
+                            created time of shadow copy of {song}: {e:?}. \
+                            Falling back to comparing metadata.",
+                        ),
+                        pb,
+                    );
+                }
+                return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
+            }
+        };
     if target_is_outdated {
         return if song.metadata.bitrate_kbps < desired_bitrate {
             U::Copied
@@ -156,7 +170,7 @@ pub fn has_music_file_changed(
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
-    compare_files_on_metadata(song, target, desired_bitrate, pb)
+    compare_files_on_metadata(song, target, desired_bitrate, pb, verbose)
 }
 
 /// Fallback, costly method: Comparing the metadata of the two files.
@@ -166,6 +180,7 @@ fn compare_files_on_metadata(
     target: &Path,
     desired_bitrate: u32,
     pb: Option<&ProgressBar>,
+    verbose: bool,
 ) -> UpdateType {
     match SongMetaData::parse_file(target) {
         Ok(shadow_metadata) => {
@@ -182,10 +197,12 @@ fn compare_files_on_metadata(
         }
         Err(e) => {
             // If we also can't read the metadata of the existing song, then its pretty clear that we need to overwrite it.
-            log_failure(
-                format!("Could not read metadata from shadow file, so overwriting it: {e}"),
-                pb,
-            );
+            if verbose {
+                log_failure(
+                    format!("Could not read metadata from shadow file, so overwriting it: {e}"),
+                    pb,
+                );
+            }
             debug_assert!(target.exists(), "Checking metadata should not fail because the file exists, because file existence is already checked earlier.");
             U::Overwrite
         }
@@ -199,6 +216,7 @@ fn has_music_file_changed_based_on_hash_and_records(
     desired_bitrate: u32,
     db: &PreviousSyncDb,
     pb: Option<&ProgressBar>,
+    verbose: bool,
 ) -> UpdateType {
     if let Some(previous_record) = db.get(&song.library_relative_path) {
         // If the file is in the previous_sync_db, but is not actually present,
@@ -235,7 +253,7 @@ fn has_music_file_changed_based_on_hash_and_records(
         // knowing if it is still up to date. Hence, it should be checked.
         // It could also be that it could just not be inserted into the records; then too,
         // checking based on metadata is a good idea.
-        return compare_files_on_metadata(song, target, desired_bitrate, pb);
+        return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
     }
 }
 
@@ -326,6 +344,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         let output_metadata = SongMetaData::parse_file(&target)?;
 
@@ -596,6 +615,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
 
@@ -617,6 +637,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u2.update_type.unwrap(), UpdateType::TranscodeMissingTarget);
 
@@ -637,6 +658,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
 
@@ -655,6 +677,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u2.update_type.unwrap(), UpdateType::NoChange);
 
@@ -675,6 +698,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u.update_type.unwrap(), UpdateType::NewTranscode);
 
@@ -687,6 +711,7 @@ mod tests {
             false,
             false,
             None,
+            true,
         )?;
         assert_eq!(u2.update_type.unwrap(), UpdateType::NoChange);
 

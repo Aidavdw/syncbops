@@ -243,6 +243,7 @@ fn main() -> miette::Result<()> {
                     cli.force,
                     cli.dry_run,
                     Some(&pb),
+                    cli.verbose,
                 ),
             )
         })
