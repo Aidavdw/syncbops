@@ -86,7 +86,14 @@ pub fn has_music_file_changed(
     pb: Option<&ProgressBar>,
 ) -> UpdateType {
     use UpdateType as U;
-    fn compare_metadata(
+
+    // We need to perform costly checks here:
+    // Checking the hash of a file takes like 1-2 ms
+    // Parsing music file metadata takes like 250 ms.
+    // Ideally, we'd only parse the metadata for the target file if it is truly necessary.
+
+    /// Fallback, costly method: Comparing the metadata of the two files.
+    fn compare_files_on_metadata(
         source: &Song,
         target: &Path,
         desired_bitrate: u32,
@@ -129,7 +136,7 @@ pub fn has_music_file_changed(
     let Some(source_hash) = hash_file(&song.absolute_path) else {
         // If you can't determine a hash,there is no way of knowing whether or not the file has
         // changed.
-        return compare_metadata(song, target, desired_bitrate, pb);
+        return compare_files_on_metadata(song, target, desired_bitrate, pb);
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
@@ -156,17 +163,24 @@ pub fn has_music_file_changed(
                 pb,
             );
         };
-        // This file does not exist in the previous_sync db.
-        // If it does exist, but somehow does not appear in the previous sync db, do not early
-        // exit- apparently it is overwritten, but weirdly.
+        // The file is not yet present, and it also does not yet appear in the records.
+        // It has to be a new file, so transcode it or copy it.
         if !target.exists() {
             return if song.metadata.bitrate_kbps < desired_bitrate {
                 U::Copied
             } else {
                 U::NewTranscode
             };
+        } else {
+            // The file is present, but somehow does not appear in the previous sync db.
+            // It could be manually moved into the target library, but then there is no way of
+            // knowing if it is still up to date. Hence, it should be checked.
+            // It could also be that it could just not be inserted into the records; then too,
+            // checking based on metadata is a good idea.
+            return compare_files_on_metadata(song, target, desired_bitrate, pb);
         }
     };
+
     // No previous_sync_db is available, or checking for a previous sync didn't work.
     // TODO: Re-instate the small check here to see if the source file is newer than the
     // destination file.
@@ -174,7 +188,7 @@ pub fn has_music_file_changed(
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
-    compare_metadata(song, target, desired_bitrate, pb)
+    compare_files_on_metadata(song, target, desired_bitrate, pb)
 }
 
 #[cfg(test)]
@@ -583,7 +597,7 @@ mod tests {
     }
 
     #[test]
-    // Running sync-rong on a file that is not changed, without records. Should not update.
+    /// Running sync-rong on a file that is not changed, without records. Should not update.
     fn sync_existing_song_no_record() -> miette::Result<()> {
         let target_library = create_test_target_library();
         let song = Song::new_debug(TestFile::Rotterdam128kbpsMp3.path(), None)?;
