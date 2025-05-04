@@ -41,6 +41,12 @@ pub enum ArtworkType {
     None,
 }
 
+impl ArtworkType {
+    pub fn is_some(&self) -> bool {
+        !matches!(self, ArtworkType::None)
+    }
+}
+
 #[derive(Clone, Debug, clap::Subcommand)]
 pub enum MusicFileType {
     /// Constant bitrate MP3. Very widely supported, not very good.

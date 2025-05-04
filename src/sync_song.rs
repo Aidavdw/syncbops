@@ -224,8 +224,20 @@ fn compare_files_on_metadata(
             // The tags should be identical, but the art might be different depending on the
             // desired format.
 
+            let should_re_encode_because_art_availability_or_desired_changed =
+                if want_embedded_album_art {
+                    // You want artwork in the shadow, you have artwork available, and there
+                    // wasn't any in the file yet.
+                    !shadow_metadata.has_embedded_album_art && source.has_artwork().is_some()
+                } else {
+                    // You don't want artwork: re-encode if it already has artwork.
+                    shadow_metadata.has_embedded_album_art
+                };
+
+            // == shadow_metadata.has_embedded_album_art;
+
             if source.metadata.title == shadow_metadata.title
-                && want_embedded_album_art == shadow_metadata.has_embedded_album_art
+                && !should_re_encode_because_art_availability_or_desired_changed
             {
                 U::NoChange
             } else {
