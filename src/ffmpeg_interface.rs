@@ -286,9 +286,7 @@ pub enum FfmpegError {
 mod tests {
     use super::FfmpegError;
     use crate::{
-        ffmpeg_interface::{parse_music_file_metadata, SongMetaData},
-        music_library::MusicFileType,
-        test_data::{TestFile, COMPARISON_BENCHMARK_TEST_FILES},
+        ffmpeg_interface::SongMetaData, music_library::MusicFileType, test_data::TestFile,
     };
     use std::path::PathBuf;
 

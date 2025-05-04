@@ -164,10 +164,10 @@ impl Display for MusicFileType {
     }
 }
 
-pub enum ImageType {
-    Png,
-    Jpg,
-}
+// pub enum ImageType {
+//     Png,
+//     Jpg,
+// }
 
 #[derive(PartialEq, Eq)]
 pub enum FileType {

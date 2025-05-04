@@ -1,5 +1,5 @@
 use crate::{
-    ffmpeg_interface::{transcode_song, FfmpegError, SongMetaData},
+    ffmpeg_interface::{transcode_song, SongMetaData},
     hashing::{hash_file, PreviousSyncDb, SyncRecord},
     log_failure,
     music_library::{
@@ -8,7 +8,7 @@ use crate::{
     song::Song,
 };
 use indicatif::ProgressBar;
-use std::{fs, io, path::Path};
+use std::{fs, path::Path};
 use UpdateType as U;
 
 /// Synchronises the file. Returns true if the file is updated, false it was not.
@@ -32,13 +32,7 @@ pub fn sync_song(
     let want_embedded_album_art = match art_strategy {
         ArtStrategy::None => false,
         ArtStrategy::EmbedAll => true,
-        ArtStrategy::PreferFile => {
-            if song.external_album_art.is_some() {
-                false
-            } else {
-                true
-            }
-        }
+        ArtStrategy::PreferFile => song.external_album_art.is_none(),
         ArtStrategy::FileOnly => false,
     };
     let desired_bitrate = target_filetype.equivalent_bitrate();
@@ -297,25 +291,25 @@ fn has_music_file_changed_based_on_hash_and_records(
     // The file is not yet present, and it also does not yet appear in the records.
     // It has to be a new file, so transcode it or copy it.
     if !target.exists() {
-        return if song.metadata.bitrate_kbps < desired_bitrate {
+        if song.metadata.bitrate_kbps < desired_bitrate {
             U::Copied
         } else {
             U::NewTranscode
-        };
+        }
     } else {
         // The file is present, but somehow does not appear in the previous sync db.
         // It could be manually moved into the target library, but then there is no way of
         // knowing if it is still up to date. Hence, it should be checked.
         // It could also be that it could just not be inserted into the records; then too,
         // checking based on metadata is a good idea.
-        return compare_files_on_metadata(
+        compare_files_on_metadata(
             song,
             target,
             want_embedded_album_art,
             desired_bitrate,
             pb,
             verbose,
-        );
+        )
     }
 }
 
@@ -341,10 +335,7 @@ mod tests {
     use crate::{
         ffmpeg_interface::SongMetaData,
         hashing::PreviousSyncDb,
-        music_library::{
-            get_shadow_filename, library_relative_path, ArtStrategy, ArtworkType, FileType,
-            MusicFileType, UpdateType,
-        },
+        music_library::{get_shadow_filename, ArtStrategy, ArtworkType, MusicFileType, UpdateType},
         song::Song,
         test_data::TestFile,
     };
