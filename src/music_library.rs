@@ -8,6 +8,7 @@ use itertools::Itertools;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -394,10 +395,16 @@ pub fn copy_dedicated_cover_art_for_song(
     }
 }
 
-#[derive(thiserror::Error, Debug, miette::Diagnostic)]
+#[derive(thiserror::Error, miette::Diagnostic)]
 pub enum MusicLibraryError {
     #[error("Could not generate a list of filenames in the source library.")]
     ListFilenames(#[from] std::io::Error),
+
+    #[error("Could not get last modified time for the source file")]
+    SourceModifiedTime(#[source] std::io::Error),
+
+    #[error("Could not get the file creation time for the already existing shadow copy")]
+    TargetCreatedTime(#[source] std::io::Error),
 
     #[error("Tried to discover albums in directory '{path}', but that is not a directory.")]
     NotADirectory { path: PathBuf },
@@ -416,4 +423,15 @@ pub enum MusicLibraryError {
 
     #[error("Could not hash the file {path}")]
     CantHash { path: PathBuf },
+}
+
+// Show the error that caused this error (chain) when debug formatting.
+impl std::fmt::Debug for MusicLibraryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{}", self)?;
+        if let Some(source) = self.source() {
+            writeln!(f, "Caused by:\n\t{}", source)?;
+        }
+        Ok(())
+    }
 }
