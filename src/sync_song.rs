@@ -8,7 +8,7 @@ use crate::{
     song::Song,
 };
 use indicatif::ProgressBar;
-use std::{fs, path::Path};
+use std::{fs, io, path::Path};
 
 /// Synchronises the file. Returns true if the file is updated, false it was not.
 pub fn sync_song(
@@ -184,11 +184,32 @@ pub fn has_music_file_changed(
     // No previous_sync_db is available, or checking for a previous sync didn't work.
     // TODO: Re-instate the small check here to see if the source file is newer than the
     // destination file.
+    let Ok(target_is_outdated) =
+        has_source_changed_after_target_has_been_created(&song.absolute_path, target)
+    else {
+        return compare_files_on_metadata(song, target, desired_bitrate, pb);
+    };
+    if target_is_outdated {
+        return if song.metadata.bitrate_kbps < desired_bitrate {
+            U::Copied
+        } else {
+            U::NewTranscode
+        };
+    }
 
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
     compare_files_on_metadata(song, target, desired_bitrate, pb)
+}
+
+fn has_source_changed_after_target_has_been_created(
+    source: &Path,
+    target: &Path,
+) -> Result<bool, MusicLibraryError> {
+    let source_filesystem_md = std::fs::metadata(source)?;
+    let target_filesystem_md = std::fs::metadata(target)?;
+    Ok(source_filesystem_md.modified()? > target_filesystem_md.created()?)
 }
 
 #[cfg(test)]
