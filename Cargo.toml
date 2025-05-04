@@ -8,7 +8,7 @@ description = "A tool to easily maintain a smaller-size copy of your music libra
 readme = "README.md"
 homepage = "https://github.com/aidavdw/syncbops"
 repository = "https://github.com/aidavdw/syncbops"
-keywords = ["music", "synchronisation", "mobile", "audio", "file-management"]
+keywords = ["music", "synchronization", "mobile", "audio", "file-management"]
 categories = ["compression", "multimedia::audio"]
 
 # Enabling link-time optimization can decrease binary size
