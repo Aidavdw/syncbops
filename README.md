@@ -8,6 +8,7 @@ Useful for keeping a compact version of your music library on a mobile device.
     - FLAC
     - ogg 
     - m4a
+    - opus (be sure your ffmpeg is compiled with `--enable-libopus`, or this won't work)
 - Output encoding can be selected from the above
 - Plays well with mixed-encoding music libraries as input (MP3 + FLAC, etc)
 - Directly copies files that are already of lower quality than the required quality instead of transcoding them.
@@ -82,8 +83,6 @@ If the records are not present, either because you explicitly told the program n
 Do note that if you turn off writing records, but there are already records present, the next run might not accurately represent the state of synchronisation of the library.
 
 # Roadmap
-- Increase test coverage for converting to non-MP3 files
-- Implement converting to OPUS
 - Allow setting maximum resolution for cover art, and automatically make it smaller if it is larger.
 - Handle centralised album art directories (AlbumName.jpg)
 - Handle deleting songs, not just adding. 

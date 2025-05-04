@@ -121,6 +121,10 @@ pub fn transcode_song(
     embed_art: bool,
     external_art_to_embed: Option<&Path>,
 ) -> Result<(), FfmpegError> {
+    // TODO: debug_assert if target type = opus, that ffmpeg is compiled with libopus, so that a
+    // useful message can be printed for failed tests if it is not.
+    // The same assert (non-debug) should be done in main() too.
+
     let mut binding = Command::new("ffmpeg");
     binding
         // Replace file if it already exists
@@ -163,7 +167,8 @@ pub fn transcode_song(
         }
         M::Opus {
             bitrate,
-            compression_level,
+            // TODO: Respect compression level
+            compression_level: _,
         } => {
             binding
                 .arg("libopus")
@@ -184,7 +189,7 @@ pub fn transcode_song(
         .arg("-map_metadata")
         .arg("0:s:0");
 
-    // TODO: For some reason, when transcoding MP3 to Ogg, it really wants to put the video track
+    // NOTE: For some reason, when transcoding MP3 to Ogg, it really wants to put the video track
     // first. At least, that is what ffprobe reports. I don't think this is a problem, but maybe
     // this should be fixed.
 
