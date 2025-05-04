@@ -29,11 +29,24 @@ pub fn sync_song(
         target_library,
         &target_filetype,
     );
+    let want_embedded_album_art = match art_strategy {
+        ArtStrategy::None => false,
+        ArtStrategy::EmbedAll => true,
+        ArtStrategy::PreferFile => {
+            if song.external_album_art.is_some() {
+                false
+            } else {
+                true
+            }
+        }
+        ArtStrategy::FileOnly => false,
+    };
     let desired_bitrate = target_filetype.equivalent_bitrate();
     let status = has_music_file_changed(
         song,
         &shadow,
         previous_sync_db,
+        want_embedded_album_art,
         desired_bitrate,
         pb,
         verbose,
@@ -90,6 +103,7 @@ pub fn has_music_file_changed(
     song: &Song,
     target: &Path,
     previous_sync_db: Option<&PreviousSyncDb>,
+    want_embedded_album_art: bool,
     // Any file that is above this bitrate will just be considered to be copied.
     desired_bitrate: u32,
     pb: Option<&ProgressBar>,
@@ -113,7 +127,14 @@ pub fn has_music_file_changed(
                 pb,
             );
         }
-        return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
+        return compare_files_on_metadata(
+            song,
+            target,
+            want_embedded_album_art,
+            desired_bitrate,
+            pb,
+            verbose,
+        );
     };
     // If a previous_sync_db is given, then we can use that to check if the hash is the same.
     if let Some(db) = previous_sync_db {
@@ -121,6 +142,7 @@ pub fn has_music_file_changed(
             song,
             source_hash,
             target,
+            want_embedded_album_art,
             desired_bitrate,
             db,
             pb,
@@ -156,7 +178,14 @@ pub fn has_music_file_changed(
                         pb,
                     );
                 }
-                return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
+                return compare_files_on_metadata(
+                    song,
+                    target,
+                    want_embedded_album_art,
+                    desired_bitrate,
+                    pb,
+                    verbose,
+                );
             }
         };
     if target_is_outdated {
@@ -170,7 +199,14 @@ pub fn has_music_file_changed(
     // We cannot just hash the target file, since it will be encoded differently.
     // So, instead we can check if the metadata is the same, and if the album art has
     // not changed.
-    compare_files_on_metadata(song, target, desired_bitrate, pb, verbose)
+    compare_files_on_metadata(
+        song,
+        target,
+        want_embedded_album_art,
+        desired_bitrate,
+        pb,
+        verbose,
+    )
 }
 
 /// Fallback, costly method: Comparing the metadata of the two files.
@@ -178,13 +214,19 @@ pub fn has_music_file_changed(
 fn compare_files_on_metadata(
     source: &Song,
     target: &Path,
+    want_embedded_album_art: bool,
     desired_bitrate: u32,
     pb: Option<&ProgressBar>,
     verbose: bool,
 ) -> UpdateType {
     match SongMetaData::parse_file(target) {
         Ok(shadow_metadata) => {
-            if source.metadata.is_same_except_bitrate(&shadow_metadata) {
+            // The tags should be identical, but the art might be different depending on the
+            // desired format.
+
+            if source.metadata.title == shadow_metadata.title
+                && want_embedded_album_art == shadow_metadata.has_embedded_album_art
+            {
                 U::NoChange
             } else {
                 // Just copy a file if you'd just incur more encoding loss
@@ -213,6 +255,7 @@ fn has_music_file_changed_based_on_hash_and_records(
     song: &Song,
     source_hash: u64,
     target: &Path,
+    want_embedded_album_art: bool,
     desired_bitrate: u32,
     db: &PreviousSyncDb,
     pb: Option<&ProgressBar>,
@@ -253,7 +296,14 @@ fn has_music_file_changed_based_on_hash_and_records(
         // knowing if it is still up to date. Hence, it should be checked.
         // It could also be that it could just not be inserted into the records; then too,
         // checking based on metadata is a good idea.
-        return compare_files_on_metadata(song, target, desired_bitrate, pb, verbose);
+        return compare_files_on_metadata(
+            song,
+            target,
+            want_embedded_album_art,
+            desired_bitrate,
+            pb,
+            verbose,
+        );
     }
 }
 
