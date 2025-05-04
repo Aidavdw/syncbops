@@ -290,7 +290,9 @@ pub enum FfmpegError {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ffmpeg_interface::SongMetaData, music_library::MusicFileType, test_data::TestFile,
+        ffmpeg_interface::{parse_music_file_metadata, SongMetaData},
+        music_library::MusicFileType,
+        test_data::{TestFile, COMPARISON_BENCHMARK_TEST_FILES},
     };
     use std::path::PathBuf;
 
@@ -630,4 +632,24 @@ mod tests {
     fn m4a_both_drop() -> miette::Result<()> {
         transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
     }
+
+    // #[test]
+    // /// Comparing how long it takes to hash a file versuse how long it takes to get metadata.
+    // /// The shorter of the two should be preferred to be done first when comparing files.
+    // fn time_hash() {
+    //     use std::time::Instant;
+    //
+    //     let now = Instant::now();
+    //     {
+    //         for testfile in COMPARISON_BENCHMARK_TEST_FILES {
+    //             let _ = parse_music_file_metadata(&testfile.path()).unwrap();
+    //         }
+    //     }
+    //     let elapsed = now.elapsed();
+    //     let avg_time_per_item = elapsed / COMPARISON_BENCHMARK_TEST_FILES.len() as u32;
+    //     panic!(
+    //         "parsing music file metadata takes avg {:.6?} per file",
+    //         avg_time_per_item
+    //     );
+    // }
 }

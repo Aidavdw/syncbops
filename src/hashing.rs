@@ -177,3 +177,27 @@ pub fn hash_file(path: &Path) -> Option<u64> {
     let hash = rapidhash::rapidhash_file(&mut file).ok()?;
     Some(hash)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_data::COMPARISON_BENCHMARK_TEST_FILES;
+
+    use super::hash_file;
+
+    // #[test]
+    // /// Comparing how long it takes to hash a file versuse how long it takes to get metadata.
+    // /// The shorter of the two should be preferred to be done first when comparing files.
+    // fn time_hash() {
+    //     use std::time::Instant;
+    //
+    //     let now = Instant::now();
+    //     {
+    //         for testfile in COMPARISON_BENCHMARK_TEST_FILES {
+    //             let _ = hash_file(&testfile.path()).unwrap();
+    //         }
+    //     }
+    //     let elapsed = now.elapsed();
+    //     let avg_time_per_item = elapsed / COMPARISON_BENCHMARK_TEST_FILES.len() as u32;
+    //     panic!("hash_file takes avg {:.6?} per file", avg_time_per_item);
+    // }
+}
