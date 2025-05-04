@@ -33,7 +33,7 @@ There are several other things you can tweak about the behaviour of the program 
 
 ## Examples
 I have a music library at `~/Music`.
-Insids this directory, songs are organised `AlbumArtistName/AlbumName/01. Song Title`. Most of the music here is in FLAC, but there are some MP3s, some m4a, and some ogg files too.
+Inside this directory, songs are organised `AlbumArtistName/AlbumName/01. Song Title`. Most of the music here is in FLAC, but there are some MP3s, some m4a, and some ogg files too.
 I have mounted my phone's storage with a usb cable at `/mnt/phone`. It is an android phone, so music is stored at `/mnt/phone/music`.
 I have not synchronised my collection yet on this device. I want to encode everything in MP3 VBR with quality factor 3.
 I would use:
