@@ -423,267 +423,960 @@ mod tests {
         Ok(())
     }
 
-    /// Setting up a test to transcode into mp3 vbr
-    fn transcode_to_mp3_cbr_test(
-        test_file: TestFile,
-        embed_art: bool,
-        external_art_to_embed: Option<TestFile>,
-    ) -> miette::Result<()> {
-        transcode_file_test(
-            test_file,
-            embed_art,
-            external_art_to_embed,
-            MusicFileType::Mp3CBR { bitrate: 80 },
-        )
+    mod to_mp3_vbr {
+        use crate::{music_library::MusicFileType, test_data::TestFile};
+
+        /// Setting up a test to transcode into mp3 vbr
+        fn build(
+            test_file: TestFile,
+            embed_art: bool,
+            external_art_to_embed: Option<TestFile>,
+        ) -> miette::Result<()> {
+            super::transcode_file_test(
+                test_file,
+                embed_art,
+                external_art_to_embed,
+                MusicFileType::Mp3VBR { quality: 6 },
+            )
+        }
+
+        // START TRANSCODING TO MP3 VBR
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn mp3_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn mp3_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn mp3_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn mp3_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn mp3_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn ogg_no_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn ogg_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn ogg_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn ogg_external_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn ogg_external_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_embed() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn flac_no_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn flac_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn flac_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn flac_external_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn flac_external_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn m4a_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn m4a_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn m4a_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn m4a_external_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn m4a_external_art_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn opus_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn opus_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn opus_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn opus_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn opus_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_embed() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                true,
+                Some(TestFile::Jpg600),
+            )
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_drop() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                false,
+                Some(TestFile::Jpg600),
+            )
+        }
     }
 
-    #[test]
-    /// Keep embedded art
-    fn mp3_to_ogg_embedded_art() -> miette::Result<()> {
-        transcode_file_test(
-            TestFile::Mp3CBRWithArt,
-            true,
-            None,
-            MusicFileType::Vorbis { quality: 4. },
-        )
+    mod to_mp3_cbr {
+        use crate::{music_library::MusicFileType, test_data::TestFile};
+
+        /// Setting up a test to transcode into mp3 vbr
+        fn build(
+            test_file: TestFile,
+            embed_art: bool,
+            external_art_to_embed: Option<TestFile>,
+        ) -> miette::Result<()> {
+            super::transcode_file_test(
+                test_file,
+                embed_art,
+                external_art_to_embed,
+                MusicFileType::Mp3CBR { bitrate: 80 },
+            )
+        }
+
+        // START TRANSCODING TO MP3 VBR
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn mp3_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn mp3_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn mp3_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn mp3_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn mp3_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn ogg_no_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn ogg_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn ogg_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn ogg_external_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn ogg_external_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_embed() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn flac_no_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn flac_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn flac_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn flac_external_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn flac_external_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn m4a_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn m4a_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn m4a_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn m4a_external_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn m4a_external_art_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn opus_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn opus_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn opus_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn opus_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn opus_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_embed() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                true,
+                Some(TestFile::Jpg600),
+            )
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_drop() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                false,
+                Some(TestFile::Jpg600),
+            )
+        }
     }
 
-    /// Setting up a test to transcode into mp3 vbr
-    fn transcode_to_mp3_vbr_test(
-        test_file: TestFile,
-        embed_art: bool,
-        external_art_to_embed: Option<TestFile>,
-    ) -> miette::Result<()> {
-        transcode_file_test(
-            test_file,
-            embed_art,
-            external_art_to_embed,
-            MusicFileType::Mp3VBR { quality: 6 },
-        )
+    mod to_ogg {
+        use crate::{music_library::MusicFileType, test_data::TestFile};
+
+        /// Setting up a test to transcode into mp3 vbr
+        fn build(
+            test_file: TestFile,
+            embed_art: bool,
+            external_art_to_embed: Option<TestFile>,
+        ) -> miette::Result<()> {
+            super::transcode_file_test(
+                test_file,
+                embed_art,
+                external_art_to_embed,
+                MusicFileType::Vorbis { quality: 2. },
+            )
+        }
+
+        // START TRANSCODING TO MP3 VBR
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn mp3_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn mp3_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn mp3_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn mp3_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn mp3_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn ogg_no_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn ogg_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn ogg_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn ogg_external_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn ogg_external_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_embed() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn flac_no_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn flac_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn flac_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn flac_external_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn flac_external_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn m4a_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn m4a_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn m4a_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn m4a_external_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn m4a_external_art_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn opus_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn opus_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn opus_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn opus_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn opus_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_embed() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                true,
+                Some(TestFile::Jpg600),
+            )
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_drop() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                false,
+                Some(TestFile::Jpg600),
+            )
+        }
     }
 
-    // START TRANSCODING TO MP3 VBR
+    mod to_opus {
+        use crate::{music_library::MusicFileType, test_data::TestFile};
 
-    #[test]
-    /// Attempt to get embedded art, even though no art is supplied
-    fn mp3_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, true, None)
+        /// Setting up a test to transcode into mp3 vbr
+        fn build(
+            test_file: TestFile,
+            embed_art: bool,
+            external_art_to_embed: Option<TestFile>,
+        ) -> miette::Result<()> {
+            super::transcode_file_test(
+                test_file,
+                embed_art,
+                external_art_to_embed,
+                MusicFileType::Opus {
+                    bitrate: 96,
+                    compression_level: 3,
+                },
+            )
+        }
+
+        // START TRANSCODING TO MP3 VBR
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn mp3_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn mp3_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn mp3_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn mp3_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn mp3_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_embed() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn mp3_both_drop() -> miette::Result<()> {
+            build(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn ogg_no_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn ogg_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn ogg_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn ogg_external_art_drop() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn ogg_external_art_embed() -> miette::Result<()> {
+            build(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_embed() -> miette::Result<()> {
+            build(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn ogg_both_drop() -> miette::Result<()> {
+            build(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn flac_no_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn flac_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn flac_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn flac_external_art_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn flac_external_art_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_embed() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn flac_both_drop() -> miette::Result<()> {
+            build(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn m4a_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn m4a_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn m4a_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn m4a_external_art_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn m4a_external_art_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_embed() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn m4a_both_drop() -> miette::Result<()> {
+            build(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// Attempt to get embedded art, even though no art is supplied
+        fn opus_no_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, None)
+        }
+
+        #[test]
+        /// Keep embedded art
+        fn opus_keep_embedded_art() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
+        }
+
+        #[test]
+        /// drop embedded album art
+        fn opus_embedded_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
+        }
+
+        #[test]
+        /// drop external art
+        fn opus_external_art_drop() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed external art
+        fn opus_external_art_embed() -> miette::Result<()> {
+            build(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_embed() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                true,
+                Some(TestFile::Jpg600),
+            )
+        }
+
+        #[test]
+        /// embed, supplied are both external art and already embedded.
+        fn opus_both_drop() -> miette::Result<()> {
+            build(
+                TestFile::Rotterdam96kbpsOpusWithArt,
+                false,
+                Some(TestFile::Jpg600),
+            )
+        }
     }
-
-    #[test]
-    /// Keep embedded art
-    fn mp3_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, true, None)
-    }
-
-    #[test]
-    /// drop embedded album art
-    fn mp3_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, false, None)
-    }
-
-    #[test]
-    /// drop external art
-    fn mp3_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed external art
-    fn mp3_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithoutArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn mp3_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn mp3_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Mp3CBRWithArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// Attempt to get embedded art, even though no art is supplied
-    fn ogg_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, true, None)
-    }
-
-    #[test]
-    /// Keep embedded art
-    fn ogg_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithArt, true, None)
-    }
-
-    #[test]
-    /// drop embedded album art
-    fn ogg_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithArt, false, None)
-    }
-
-    #[test]
-    /// drop external art
-    fn ogg_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed external art
-    fn ogg_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithoutArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn ogg_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn ogg_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::OggWithArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// Attempt to get embedded art, even though no art is supplied
-    fn flac_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, true, None)
-    }
-
-    #[test]
-    /// Keep embedded art
-    fn flac_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, true, None)
-    }
-
-    #[test]
-    /// drop embedded album art
-    fn flac_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, false, None)
-    }
-
-    #[test]
-    /// drop external art
-    fn flac_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed external art
-    fn flac_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithoutArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn flac_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn flac_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::FlacWithArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// Attempt to get embedded art, even though no art is supplied
-    fn m4a_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, None)
-    }
-
-    #[test]
-    /// Keep embedded art
-    fn m4a_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, true, None)
-    }
-
-    #[test]
-    /// drop embedded album art
-    fn m4a_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, None)
-    }
-
-    #[test]
-    /// drop external art
-    fn m4a_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed external art
-    fn m4a_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithoutArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn m4a_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn m4a_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::M4aWithArt, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// Attempt to get embedded art, even though no art is supplied
-    fn opus_no_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, None)
-    }
-
-    #[test]
-    /// Keep embedded art
-    fn opus_keep_embedded_art() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpusWithArt, true, None)
-    }
-
-    #[test]
-    /// drop embedded album art
-    fn opus_embedded_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpusWithArt, false, None)
-    }
-
-    #[test]
-    /// drop external art
-    fn opus_external_art_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, false, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed external art
-    fn opus_external_art_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(TestFile::Rotterdam96kbpsOpus, true, Some(TestFile::Jpg600))
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn opus_both_embed() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(
-            TestFile::Rotterdam96kbpsOpusWithArt,
-            true,
-            Some(TestFile::Jpg600),
-        )
-    }
-
-    #[test]
-    /// embed, supplied are both external art and already embedded.
-    fn opus_both_drop() -> miette::Result<()> {
-        transcode_to_mp3_vbr_test(
-            TestFile::Rotterdam96kbpsOpusWithArt,
-            false,
-            Some(TestFile::Jpg600),
-        )
-    }
-
-    // END TRANSCODING TO MP3 VBR
-
     // #[test]
     // /// Comparing how long it takes to hash a file versuse how long it takes to get metadata.
     // /// The shorter of the two should be preferred to be done first when comparing files.
