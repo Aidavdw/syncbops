@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{fmt::Display, path::PathBuf};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct Song {
     /// Where the original song file can be found
     pub absolute_path: PathBuf,

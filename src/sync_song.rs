@@ -94,7 +94,7 @@ pub fn has_music_file_changed(
     ) -> UpdateType {
         match SongMetaData::parse_file(target) {
             Ok(shadow_metadata) => {
-                if source.metadata == shadow_metadata {
+                if source.metadata.is_same_except_bitrate(&shadow_metadata) {
                     U::NoChange
                 } else {
                     // Just copy a file if you'd just incur more encoding loss

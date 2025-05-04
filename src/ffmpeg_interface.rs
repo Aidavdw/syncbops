@@ -8,16 +8,23 @@ use std::{
 
 /// Gets stuff like title, artist name, etc.
 /// Also, whether the song has album art.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct SongMetaData {
     pub title: Option<String>,
     pub bitrate_kbps: u32,
     pub has_embedded_album_art: bool,
+    // TODO: Extend with Duration, Artist, Album Artist, Album, etc. Considering how many tags
+    // there are, maybe even save all actual 'tags' as a hashmap.
 }
 
 impl SongMetaData {
     pub fn parse_file(path: &Path) -> Result<SongMetaData, FfmpegError> {
         parse_music_file_metadata(path)
+    }
+
+    /// When you want to use an == operator but not consider the bitrate.
+    pub fn is_same_except_bitrate(&self, other: &SongMetaData) -> bool {
+        self.title == other.title && self.has_embedded_album_art == other.has_embedded_album_art
     }
 }
 
