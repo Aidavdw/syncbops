@@ -290,7 +290,10 @@ pub fn find_songs_in_library(library_root: &Path) -> Result<Vec<Song>, MusicLibr
         .filter_map(|path| {
             let Some(filetype) = identify_file_type(path) else {
                 log_failure(
-                    format!("Could not identify file {}", path.display()),
+                    format!(
+                        "Could not identify file {} as a music file. Skipping it.",
+                        path.display()
+                    ),
                     Some(&pb),
                 );
                 return None;

@@ -59,6 +59,7 @@ struct Cli {
     verbose: bool,
 
     /// Automatically say 'yes' to any prompts that show up.
+    /// Use this flag if you use syncbops non-interactively, e.g. in a script.
     #[arg(short, long, default_value_t = false)]
     yes: bool,
 
@@ -101,16 +102,11 @@ fn main() -> Result<(), MusicLibraryError> {
     // It would really suck to accidentally overwrite your main library with your transcoded
     // stuff by mixing up the source dir and target dir. So, here are some guardrails to make
     // it much harder for that to happen:
-    // Ask for confirmation if:
-    // 1. there exists a database file in this directory (this is indicative of this being a
-    //    target lib)
-    // 2. The target library is larger than the source library
-    // 3. The target library contains FLAC files.
-    // You can also check on a metadata level, but not ideal.
-    // 4. there are many low-bitrate songs in the target library.
-    // 5. The target library contains high-bitrate songs
+    // Ask for confirmation if: (numbered)
     if !cli.yes {
-        // 1. there exists a database file in this directory (this is indicative of this being a
+        // 1. There exists a database file in the source directory
+        //   (this is indicative of this being a target lib,
+        //   so you probably switched the two up)
         let records_in_source_library = source_library.join(PREVIOUS_SYNC_DB_FILENAME);
         if records_in_source_library.exists() {
             let confirmation = Confirm::new()
@@ -128,8 +124,8 @@ fn main() -> Result<(), MusicLibraryError> {
             if confirmation {
                 println!("Continuing anyway!");
             } else {
-                println!("Aborting. Saved your music library!");
-                exit(0);
+                println!("Aborting. Saved you from overwriting your source music library!");
+                return Ok(());
             }
         }
 
@@ -188,6 +184,8 @@ fn main() -> Result<(), MusicLibraryError> {
         //         exit(0);
         //     }
         // }
+
+        // 5. TODO: The target library contains high-bitrate songs
     }
 
     // Report if there are songs without album art.
@@ -410,12 +408,12 @@ fn print_library_size_reduction(source_library: &Path, target_library: &Path) {
     use fs_extra::dir::get_size;
     let source_lib_size = get_size(source_library).unwrap();
     let target_lib_size = get_size(target_library).unwrap();
-    let percentage_reduction = (target_lib_size) as f64 / source_lib_size as f64 * 100.;
+    let percentage_reduction = 100. - ((target_lib_size) as f64 / source_lib_size as f64 * 100.);
     println!(
-        "Reduced library from {} MB to {} MB ({:.2}%)",
-        source_lib_size / 1_000_000,
+        "Target library is {} MB, reduced {:.2}% from the source library ({} MB)",
         target_lib_size / 1_000_000,
-        percentage_reduction
+        percentage_reduction,
+        source_lib_size / 1_000_000,
     )
 }
 
