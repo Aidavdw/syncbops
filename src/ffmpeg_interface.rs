@@ -113,6 +113,47 @@ fn parse_music_file_metadata(path: &Path) -> Result<SongMetaData, FfmpegError> {
     })
 }
 
+pub fn ensure_ffmpeg_capable(filetype: &MusicFileType) -> Result<(), FfmpegCapabilityError> {
+    let mut binding = Command::new("ffmpeg");
+    binding.arg("-hide_banner").arg("-buildconf");
+    let ffprobe = binding.output()?;
+    let stdout = String::from_utf8(ffprobe.stdout)?;
+    match filetype {
+        MusicFileType::Mp3CBR { .. } => (),
+        MusicFileType::Mp3VBR { .. } => (),
+        MusicFileType::Opus { .. } => {
+            if !stdout.contains("--enable-libopus") {
+                return Err(FfmpegCapabilityError::OpusNotAvailable);
+            }
+        }
+        MusicFileType::Vorbis { .. } => {
+            if !stdout.contains("--enable-libvorbis") {
+                return Err(FfmpegCapabilityError::VorbisNotAvailable);
+            }
+        }
+
+        MusicFileType::Flac { .. } => (),
+    }
+
+    Ok(())
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum FfmpegCapabilityError {
+    #[error("could not execute the ffmpeg command")]
+    Io(#[from] std::io::Error),
+    #[error("could not parse output of ffmpeg to a string")]
+    Utf(#[from] std::string::FromUtf8Error),
+    #[error("ffmpeg does not appear to be available. Are you sure you have installed it?")]
+    NotInstalled,
+    #[error(
+        "Cannot encode to Vorbis (ogg), because ffmpeg was not built with `--enable-libvorbis`."
+    )]
+    VorbisNotAvailable,
+    #[error("Cannot encode to OPUS, because ffmpeg was not built with `--enable-libopus`.")]
+    OpusNotAvailable,
+}
+
 /// Takes a path of a song file, transcodes it using ffmpeg, and saves it to the target path. Returns the path of the output file. Like `ffmpeg -i [input file] -codec:a libmp3lame -q:a [V-level] [output file].mp3`
 pub fn transcode_song(
     source: &Path,
@@ -121,9 +162,7 @@ pub fn transcode_song(
     embed_art: bool,
     external_art_to_embed: Option<&Path>,
 ) -> Result<(), FfmpegError> {
-    // TODO: debug_assert if target type = opus, that ffmpeg is compiled with libopus, so that a
-    // useful message can be printed for failed tests if it is not.
-    // The same assert (non-debug) should be done in main() too.
+    ensure_ffmpeg_capable(&target_type)?;
 
     let mut binding = Command::new("ffmpeg");
     binding
@@ -296,6 +335,9 @@ pub enum FfmpegError {
 
     #[error("Could not run FFmpeg on {path}, because it does not exist.")]
     FileDoesNotExist { path: String },
+
+    #[error("ffmpeg does not have the required capabilities.")]
+    Capability(#[from] FfmpegCapabilityError),
 }
 
 #[cfg(test)]

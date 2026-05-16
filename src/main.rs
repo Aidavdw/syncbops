@@ -25,6 +25,8 @@ use std::{
 };
 use sync_song::sync_song;
 
+use crate::ffmpeg_interface::ensure_ffmpeg_capable;
+
 /// What all the individual attempts at syncing are collected into.
 type SyncResults<'a> = Vec<(&'a Song, Result<SyncRecord, MusicLibraryError>)>;
 
@@ -98,6 +100,9 @@ fn main() -> Result<(), MusicLibraryError> {
     println!("Discovering files in {}", source_library.display());
     let songs = find_songs_in_library(&source_library)?;
     println!("Discovered {} songs.", songs.len());
+
+    // Check capabilities of ffmpeg
+    ensure_ffmpeg_capable(&cli.target_filetype)?;
 
     // It would really suck to accidentally overwrite your main library with your transcoded
     // stuff by mixing up the source dir and target dir. So, here are some guardrails to make

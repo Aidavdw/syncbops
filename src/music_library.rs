@@ -1,3 +1,4 @@
+use crate::ffmpeg_interface::FfmpegCapabilityError;
 use crate::ffmpeg_interface::FfmpegError;
 use crate::log_failure;
 use crate::song::Song;
@@ -433,6 +434,9 @@ pub enum MusicLibraryError {
 
     #[error("Could not hash the file {path}")]
     CantHash { path: PathBuf },
+
+    #[error("ffmpeg does not have the required capabilities.")]
+    Capability(#[from] FfmpegCapabilityError),
 }
 
 // Show the error that caused this error (chain) when debug formatting.
