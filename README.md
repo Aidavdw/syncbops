@@ -1,3 +1,9 @@
+REPLACED BY SYNCBOPY
+
+
+
+---
+
 A tool to easily maintain a smaller-size copy of your music library, and keep it in sync with your main library.
 Useful for keeping a compact version of your music library on a mobile device.
 
