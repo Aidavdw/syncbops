@@ -3,12 +3,13 @@ Useful for keeping a compact version of your music library on a mobile device.
 
 # Features
 - Transcodes files to a smaller format
-- Handles many music filetypes:
+- Handles many music input filetypes:
     - MP3
     - FLAC
     - ogg 
     - m4a
     - opus (be sure your ffmpeg is compiled with `--enable-libopus`, or this won't work)
+- ... And equally many output formats!
 - Output encoding can be selected from the above
 - Plays well with mixed-encoding music libraries as input (MP3 + FLAC, etc)
 - Directly copies files that are already of lower quality than the required quality instead of transcoding them.
@@ -42,6 +43,18 @@ syncbops ~/Music /mnt/phone/music/ mp3-vbr -q 3
 ```
 
 %% add example for art strategy %%
+
+## Limitations
+### Tags with multiple values
+Some file types have a preference for repeating tags if they have multiple values.
+For example, a FLAC file for a song with multiple artitst would have tags `Artist=ArtistA` and `Artist=ArtistB`.
+This program uses ffmpeg under the hood, which does not respect this. Instead, it will join them together as `Artist=ArtistA;ArtistB`.
+It will do this even if the target filetype allows repeated values, for example in the conversion from FLAC to OPUS.
+You cannot change the separator, nor can you work around this.
+
+Similarly, if you go from a filetype which allows only a single tag (MP3's ID3v2.x), there is no way to 'split' the tags.
+It will simply copy over the tag verbatim.
+This means that filetypes which allow repeating values are 
 
 # Installation
 Easiest way is to install through cargo! This will build the program from source, so it should work on any platform.
